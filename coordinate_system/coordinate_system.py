@@ -56,7 +56,6 @@ class CoordinateSystem:
         origin = np.copy(self.__origin)
         if not deg:
             origin[:2] *= np.pi / 180.
-
         return pymap3d.enu.geodetic2enu(
             latitude,
             longitude,
@@ -93,7 +92,6 @@ class CoordinateSystem:
         origin = np.copy(self.__origin)
         if not deg:
             origin[:2] *= np.pi / 180.
-
         return pymap3d.enu.enu2geodetic(
             easting,
             northing,
@@ -130,7 +128,6 @@ class CoordinateSystem:
         :return: Array of floats with shape (3,)
             East, north and up coordinates in this coordinate system
         """
-
         lon, lat, h = pymap3d.enu.enu2geodetic(
             easting,
             northing,
@@ -144,7 +141,7 @@ class CoordinateSystem:
         new_origin = np.copy(self.__origin)
         if not deg:
             new_origin[:2] *= np.pi / 180.
-        return pymap3d.enu.enu2geodetic(
+        return pymap3d.enu.geodetic2enu(
             lon,
             lat,
             h,
