@@ -99,6 +99,8 @@ for i_row, data_point in enumerate(survey_data):
             component_name = 'Helper {}'.format(point_names[i_row][-1].upper())
         elif 'power' in point_names[i_row]:
             component_name = 'Power A'
+        elif point_names[i_row][-6:] == 'pulser':
+            component_name = 'Surface Pulser'
         else:
             continue
         coordinates_2021 = survey_data[i_row, 1:4]

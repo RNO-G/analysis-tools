@@ -51,7 +51,7 @@ def build_device(
     }
     return dic
 
-
+surface_position = None
 for station_id in build_instructions.keys():
     if station_id == 'general':
         continue
@@ -87,6 +87,16 @@ for station_id in build_instructions.keys():
     Loop through entries in the GPS file and write down the channels associated with them.
     """
     for row in position_reader:
+        """
+        Store position of the surface pulser
+        """
+        if row[0] == 'Surface Pulser':
+            surface_position = np.array(cs_disk.enu_to_enu(
+                float(row[2]),
+                float(row[5]),
+                float(row[8]),
+                cs_msf.get_origin()
+            )) - power_string_pos_disc
         """
         The channel_associations lists which channels belong to a specific entry in the GPS data.
         """
@@ -230,6 +240,14 @@ for station_id in build_instructions.keys():
                 1,
                 'Helper String B Cal Vpol'
             )
+    surface_position[2] = -.5
+    detector_description['devices'][str(i_devices + 2)] = build_device(
+        surface_position,
+        build_instructions[station_id]['deployment_dates']['Station'],
+        int(station_id),
+        2,
+        'Surface Cal Pulser'
+    )
     i_devices += 3
 
 json.dump(
