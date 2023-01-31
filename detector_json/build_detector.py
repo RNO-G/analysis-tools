@@ -134,10 +134,18 @@ for station_id in build_instructions.keys():
                         antenna_orientation_phi = 0.0
                     else:
                         antenna_orientation_theta = 120.0
-                        if channel_id in [14, 17, 20]:
-                            antenna_orientation_phi = radiotools.helper.get_normalized_angle(antenna_rotation_phi - 90., True)
+                        if int(station_id) == 21:
+                            if channel_id in [14, 17, 20]:
+                                antenna_orientation_phi = radiotools.helper.get_normalized_angle(
+                                    antenna_rotation_phi + 90., True)
+                            else:
+                                antenna_orientation_phi = radiotools.helper.get_normalized_angle(
+                                    antenna_rotation_phi - 90., True)
                         else:
-                            antenna_orientation_phi = radiotools.helper.get_normalized_angle(antenna_rotation_phi + 90., True)
+                            if channel_id in [14, 17, 20]:
+                                antenna_orientation_phi = radiotools.helper.get_normalized_angle(antenna_rotation_phi - 90., True)
+                            else:
+                                antenna_orientation_phi = radiotools.helper.get_normalized_angle(antenna_rotation_phi + 90., True)
                 if str(channel_id) in build_instructions[str(station_id)]['channel_depths'].keys():
                     channel_z = -build_instructions[str(station_id)]['channel_depths'][str(channel_id)]
                 else:
