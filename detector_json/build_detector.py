@@ -26,7 +26,30 @@ detector_description = {
 cs_disk = coordinate_system.coordinate_system.CoordinateSystem()
 cs_msf = coordinate_system.coordinate_system.CoordinateSystem('GPS_basestation')
 i_channel = 0
+i_devices = 0
 
+def build_device(
+        position,
+        commission_time,
+        station_id,
+        device_id,
+        comment
+):
+    dic = {
+        'ant_comment': comment,
+        'ant_orientation_phi': 0.0,
+        'ant_orientation_theta': 0.0,
+        'ant_rotation_phi': 90.0,
+        'ant_rotation_theta': 90.0,
+        'ant_position_x': position[0],
+        'ant_position_y': position[1],
+        'ant_position_z': position[2],
+        'commission_time': commission_time,
+        'decommission_time': '{TinyDate}:2035-11-01T00:00:00',
+        'device_id': device_id,
+        'station_id': station_id
+    }
+    return dic
 
 
 for station_id in build_instructions.keys():
@@ -177,9 +200,38 @@ for station_id in build_instructions.keys():
                 for antenna_type in build_instructions['general']['antenna_types'].keys():
                     if channel_id in build_instructions['general']['antenna_types'][antenna_type]:
                         channel_json['ant_type'] = antenna_type
-
                 detector_description['channels'][str(i_channel)] = channel_json
                 i_channel += 1
+    if 'devices' not in detector_description.keys():
+        detector_description['devices'] = {}
+    fiber_0_position = np.zeros(3)
+    fiber_1_position = np.zeros(3)
+
+    for i_ch, ch in detector_description['channels'].items():
+        if ch['station_id'] == int(station_id) and ch['channel_id'] == 21:
+            fiber_0_position[0] = ch['ant_position_x']
+            fiber_0_position[1] = ch['ant_position_y']
+            fiber_0_position[2] = -build_instructions[station_id]['channel_depths']['fiber0']
+            detector_description['devices'][str(i_devices)] = build_device(
+                fiber_0_position,
+                ch['commission_time'],
+                int(station_id),
+                0,
+                'Helper String C Cal Vpol'
+            )
+        if ch['station_id'] == int(station_id) and ch['channel_id'] == 11:
+            fiber_1_position[0] = ch['ant_position_x']
+            fiber_1_position[1] = ch['ant_position_y']
+            fiber_1_position[2] = -build_instructions[station_id]['channel_depths']['fiber1']
+            detector_description['devices'][str(i_devices + 1)] = build_device(
+                fiber_1_position,
+                ch['commission_time'],
+                int(station_id),
+                1,
+                'Helper String B Cal Vpol'
+            )
+    i_devices += 3
+
 json.dump(
     detector_description,
     open('RNO_season_2022.json', 'w'),
