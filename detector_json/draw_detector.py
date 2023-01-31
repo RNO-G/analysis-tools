@@ -12,16 +12,22 @@ det = NuRadioReco.detector.detector.Detector(
 det.update(astropy.time.Time.now())
 station_ids = det.get_station_ids()
 
-n_cols = 2
-n_rows = len(station_ids) // n_cols + len(station_ids) % n_cols
+n_cols = 4
+n_rows = len(station_ids) // n_cols
+if len(station_ids) % n_cols > 0:
+    n_rows += 1
 fig1 = plt.figure(figsize=(n_cols * 3, n_rows * 3))
 fig2 = plt.figure(figsize=(8, 8))
+fig3 = plt.figure(figsize=(n_cols * 4, n_rows * 9))
 ax2_1 = fig2.add_subplot(111)
 global_channel_pos = []
 station_positions = []
 for i_station, station_id in enumerate(station_ids):
     ax1_1 = fig1.add_subplot(n_rows, n_cols, i_station +  1)
     ax1_1.set_title('Station {}'.format(station_id))
+    ax3_1 = fig3.add_subplot(n_rows, n_cols, i_station + 1)
+    ax3_1.set_title('Station {}'.format(station_id))
+
     deep_pos = []
     lpda_pos = []
     station_pos = det.get_absolute_position(station_id)
@@ -56,6 +62,32 @@ for i_station, station_id in enumerate(station_ids):
                     channel_id
                 )
         global_channel_pos.append(pos + station_pos)
+    surface_pulser = det.get_device(station_id, 2)
+    fiber0 = det.get_device(station_id, 0)
+    fiber1 = det.get_device(station_id, 1)
+    ax1_1.scatter(
+        surface_pulser['ant_position_x'],
+        surface_pulser['ant_position_y'],
+        c='orange'
+    )
+    ax3_1.scatter(
+        surface_pulser['ant_position_x'],
+        surface_pulser['ant_position_z'],
+        c='orange',
+        marker='s'
+    )
+    ax3_1.scatter(
+        fiber0['ant_position_x'],
+        fiber0['ant_position_z'],
+        c='green',
+        marker='s'
+    )
+    ax3_1.scatter(
+        fiber1['ant_position_x'],
+        fiber1['ant_position_z'],
+        c='red',
+        marker='s'
+    )
     station_positions.append(station_pos)
     deep_pos = np.array(deep_pos)
     lpda_pos = np.array(lpda_pos)
@@ -69,8 +101,19 @@ for i_station, station_id in enumerate(station_ids):
             lpda_pos[:, 1],
             marker='^'
         )
+        ax3_1.scatter(
+            lpda_pos[:, 0],
+            lpda_pos[:, 2],
+            marker='^'
+        )
     ax1_1.set_aspect('equal')
     ax1_1.grid()
+    ax3_1.scatter(
+        deep_pos[:, 0],
+        deep_pos[:, 2],
+        s=10
+    )
+    ax3_1.grid()
 station_positions = np.array(station_positions)
 global_channel_pos = np.array(global_channel_pos)
 for i_station, station_position in enumerate(station_positions):
