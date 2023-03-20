@@ -1,7 +1,7 @@
 import numpy as np
 import json
 import csv
-import coordinate_system.coordinate_system
+import rnog_analysis_tools.coordinate_system.coordinate_system
 import radiotools.helper
 
 """
@@ -17,14 +17,15 @@ fiber_delays.json contains the measured delays for each fiber used for the deep 
 It is created by the script fiber_delays.py, using the measurements done by Kaeli.
 """
 fiber_delays = json.load(open('fiber_delays.json', 'r'))
+surface_cable_delays = json.load(open('surface_cable_delays.json', 'r'))
 channel_ids = np.arange(0, 24, dtype=int)
 detector_description = {
     "channels": {},
     "stations": {}
 }
 
-cs_disk = coordinate_system.coordinate_system.CoordinateSystem()
-cs_msf = coordinate_system.coordinate_system.CoordinateSystem('GPS_basestation')
+cs_disk = rnog_analysis_tools.coordinate_system.coordinate_system.CoordinateSystem()
+cs_msf = rnog_analysis_tools.coordinate_system.coordinate_system.CoordinateSystem('GPS_basestation')
 i_channel = 0
 i_devices = 0
 
@@ -147,9 +148,11 @@ for station_id in build_instructions.keys():
                         cable_delay = fiber_delays[str(build_instructions[station_id]['fiber_overrides'][str(channel_id)])][str(channel_id)]
                 else:
                     """
-                    For the LPDAs, all cables essentially have the same fiber delays.
+                    Get the cable delay measurements. The cables for the surface antennas were taken from the same box as the
+                    fibers for the power string.
                     """
-                    cable_delay = 45.5
+                    surface_cable_delay_measurement =surface_cable_delays[str(build_instructions[station_id]['fiber_mapping'])]
+                    cable_delay = surface_cable_delay_measurement[str(build_instructions['general']['surface_cable_mappings'][str(channel_id)])]
                     """
                     Sometimes, the cables for the LPDAs were extended with jumper cables. If so, the channel ID is
                     stored in the jumpers entry once for every jumper cable added for that channel, so the additional

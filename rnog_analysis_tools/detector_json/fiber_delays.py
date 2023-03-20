@@ -4,6 +4,13 @@ import glob
 import scipy.signal
 import json
 import os.path
+
+"""
+This script calculates the signal delays for the fibers used for the RNO-G deep channels, using measurements done
+pre-deployment by Kaeli Hughes and Dan Southall. To run it, download measuremetn data from https://drive.google.com/drive/folders/1mASLMMJhxWzbNFcEOQBc8KWy2cAb99GB?usp=sharing
+and place it in the same folder as this file.
+"""
+
 build_instructions = json.load(open('build_info.json', 'r'))
 station_ids = range(1, 11)
 channel_time_delays = np.zeros((len(station_ids), len(build_instructions['general']['fiber_mappings'].keys())))
@@ -18,22 +25,22 @@ for i_station, station_id in enumerate(station_ids):
     fig1 = plt.figure(figsize=(n_rows * 2, 16))
     fiber_delay_dict[str(station_id)] = {}
     for i_channel, channel in enumerate(build_instructions['general']['fiber_mappings'].keys()):
-        filename = '/home/welling/RadioNeutrino/data/FIBER_CALIB_RNO_G-20220923T164319Z-001/FIBER_CALIB_RNO_G/FinalData/{}{}_FULL_P.csv'.format(
+        filename = 'FIBER_CALIB_RNO_G/FinalData/{}{}_FULL_P.csv'.format(
             station_id,
             build_instructions['general']['fiber_mappings'][channel]
         )
         if not os.path.exists(filename):
-            filename = '/home/welling/RadioNeutrino/data/FIBER_CALIB_RNO_G-20220923T164319Z-001/FIBER_CALIB_RNO_G/FinalData/{}{}_FULL_P.csv'.format(
+            filename = 'FIBER_CALIB_RNO_G/FinalData/{}{}_FULL_P.csv'.format(
                 station_id,
                 build_instructions['general']['fiber_mappings'][channel].upper()
             )
         if not os.path.exists(filename):
-            filename = '/home/welling/RadioNeutrino/data/FIBER_CALIB_RNO_G-20220923T164319Z-001/FIBER_CALIB_RNO_G/FinalData/{}{}_P.csv'.format(
+            filename = 'FIBER_CALIB_RNO_G/FinalData/{}{}_P.csv'.format(
                 station_id,
                 build_instructions['general']['fiber_mappings'][channel].upper()
             )
         if not os.path.exists(filename):
-            filename = '/home/welling/RadioNeutrino/data/FIBER_CALIB_RNO_G-20220923T164319Z-001/FIBER_CALIB_RNO_G/FinalData/{}{}_FULL_P.csv'.format(
+            filename = 'FIBER_CALIB_RNO_G/FinalData/{}{}_FULL_P.csv'.format(
                 station_id,
                 build_instructions['general']['fiber_mappings'][channel].lower()
             )
