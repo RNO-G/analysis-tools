@@ -1,50 +1,35 @@
 import numpy as np
 import matplotlib.pyplot as plt
-#import NuRadioReco.modules.io.rno_g.readRNOGData
-import NuRadioReco.modules.io.rno_g.rnogDataReader
+import NuRadioReco.modules.io.RNO_G.readRNOGDataMattak
 from NuRadioReco.utilities import units, fft
-import glob
-import os
 import argparse
-import radiotools.helper
-import json
-import subprocess
-import tqdm
-import requests
-import scipy.optimize
 
 parser = argparse.ArgumentParser()
 parser.add_argument('station', type=int)
 parser.add_argument('run', type=int)
+parser.add_argument('--number_of_runs', type=int, default=1, help='How many runs are used (default = 1)? The "run" will be used as the first run.')
 parser.add_argument('--n_events', type=int, default=1000000)
-parser.add_argument('--events_per_block', type=int, default=10)
+parser.add_argument('--events_per_block', type=int, default=100)
 args = parser.parse_args()
 sampling_rate = 3.2
-# channel_ids = np.arange(24, dtype=int)
-channel_ids = np.array([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23])
+channel_ids = np.arange(24, dtype=int)
 n_cols = 4
 n_rows = channel_ids.shape[0] // n_cols
-#data_reader = NuRadioReco.modules.io.rno_g.readRNOGData.readRNOGData()
-filename = 'station{}/run{}/combined.root'.format(args.station, args.run)
-# filename = '/home/henrichs/radiant_data/glitch_measurement_31032021/run{}/combined.root'.format(args.run)
-# filename = '/home/henrichs/radiant_data/test_radiant/run{}/combined.root'.format(args.run)
-#filename = []
-#for fn in range(1):
-# #    filename.append('/home/henrichs/radiant_data/long_run_scrambled_data/run{}/combined.root'.format(args.run + fn + 44))
-    # filename.append('/home/henrichs/radiant_data/glitch_measurement_10Hz_05042023/combined_run{}.root'.format(args.run + fn))
-    # filename.append('/home/henrichs/radiant_data/glitch_measurement_external_power_source/run{}/combined.root'.format(args.run + fn))
-    # filename.append('/home/henrichs/radiant_data/glitch_measurement_external_power_source/combined_run{}.root'.format(args.run + fn))
-#    filename.append('/home/henrichs/radiant_data/glitch_measurement_external_power_source_10Hz/combined_run{}.root'.format(args.run + fn))
-#     print(args.run + fn)
-#data_reader.begin(filename)
-data_reader = NuRadioReco.modules.io.rno_g.rnogDataReader.RNOGDataReader([filename])
+
+readRNOGData = NuRadioReco.modules.io.RNO_G.readRNOGDataMattak.readRNOGData()
+
+filename = []
+for run_i in range(args.number_of_runs):
+    filename.append('/home/henrichs/cluster_mount/rnog_data/inbox/station{}/run{}/'.format(args.station, args.run + run_i))
+
 print(filename)
-#data_reader = NuRadioReco.modules.io.rno_g.rnogDataReader.RNOGDataReader(filename)
+
+readRNOGData.begin(filename, mattak_kwargs={'backend':'uproot'}, overwrite_sampling_rate=3.2*units.GHz, convert_to_voltage=False, apply_baseline_correction=False)
 
 if channel_ids.shape[0] % n_cols > 0:
     n_rows += 1
 
-n_events = min(args.n_events, data_reader.get_n_events())
+n_events = min(args.n_events, len(readRNOGData.get_events_information()))
 block_size = args.events_per_block
 n_blocks = int(np.ceil(n_events / block_size))
 connection_points = np.array([32, 64, 128])
@@ -59,8 +44,7 @@ def gaussian(x, A, mu, sigma):
 
 i_block = 0
 
-#for i_event, event in enumerate(data_reader.run()):
-for i_event, event in enumerate(data_reader.get_events()):
+for i_event, event in enumerate(readRNOGData.run()):
     print(i_event, end='\r')
     station = event.get_station(args.station)
     if i_event >= n_events:
@@ -96,5 +80,4 @@ for i_channel, channel_id in enumerate(channel_ids):
     ax1_1.set_xlabel('N block')
     ax1_1.set_ylabel('$\delta$U [a.u.]')
 fig1.tight_layout()
-#plt.show()
-plt.savefig("glitches.png")
+plt.show()
