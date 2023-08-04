@@ -23,7 +23,7 @@ detector_description = {
     "channels": {},
     "stations": {}
 }
-
+year = 2023
 cs_disk = rnog_analysis_tools.coordinate_system.coordinate_system.CoordinateSystem()
 cs_msf = rnog_analysis_tools.coordinate_system.coordinate_system.CoordinateSystem('GPS_basestation')
 i_channel = 0
@@ -56,7 +56,10 @@ surface_position = None
 for station_id in build_instructions.keys():
     if station_id == 'general':
         continue
-    position_filename = build_instructions[station_id]['gps_results_file']
+    if year == 2022:
+        position_filename = build_instructions[station_id]['gps_results_file']
+    else:
+        position_filename = "gps_results/survey_2023_station{}.csv".format(station_id)
     position_reader = csv.reader(open(position_filename, 'r'), delimiter=',')
     power_string = None
     """
@@ -66,12 +69,19 @@ for station_id in build_instructions.keys():
         if row[0] == 'Power A':
             power_string = row
             break
-    power_string_pos_disc = np.array(cs_disk.enu_to_enu(
-        float(power_string[2]),
-        float(power_string[5]),
-        float(power_string[8]),
-        cs_msf.get_origin()
-    ))
+    if year == 2022:
+        power_string_pos_disc = np.array(cs_disk.enu_to_enu(
+            float(power_string[2]),
+            float(power_string[5]),
+            float(power_string[8]),
+            cs_msf.get_origin()
+        ))
+    else:
+        power_string_pos_disc = np.array([
+            float(power_string[2]),
+            float(power_string[5]),
+            float(power_string[8])
+        ])
     """
     Write the station information into the detector JSON
     """
@@ -92,12 +102,21 @@ for station_id in build_instructions.keys():
         Store position of the surface pulser
         """
         if row[0] == 'Surface Pulser':
-            surface_position = np.array(cs_disk.enu_to_enu(
-                float(row[2]),
-                float(row[5]),
-                float(row[8]),
-                cs_msf.get_origin()
-            )) - power_string_pos_disc
+            if year == 2022:
+                surface_position = np.array(cs_disk.enu_to_enu(
+                    float(row[2]),
+                    float(row[5]),
+                    float(row[8]),
+                    cs_msf.get_origin()
+                )) - power_string_pos_disc
+            else:
+                surface_position = np.array([
+                    float(row[2]),
+                    float(row[5]),
+                    float(row[8])
+                ]) - power_string_pos_disc
+
+
         """
         The channel_associations lists which channels belong to a specific entry in the GPS data.
         """
@@ -120,12 +139,19 @@ for station_id in build_instructions.keys():
             """
             This transforms the GPS positions to be relative to the DISC hole instead of MSF
             """
-            channel_position = np.array(cs_disk.enu_to_enu(
-                float(row[2]),
-                float(row[5]),
-                float(row[8]),
-                cs_msf.get_origin()
-            ))
+            if year == 2022:
+                channel_position = np.array(cs_disk.enu_to_enu(
+                    float(row[2]),
+                    float(row[5]),
+                    float(row[8]),
+                    cs_msf.get_origin()
+                ))
+            else:
+                channel_position = np.array([
+                    float(row[2]),
+                    float(row[5]),
+                    float(row[8])
+                ])
             relative_position = channel_position - power_string_pos_disc
             """
             Loop through all channels that are associated with the current GPS position
@@ -252,9 +278,12 @@ for station_id in build_instructions.keys():
         'Surface Cal Pulser'
     )
     i_devices += 3
-
+if year == 2022:
+    outfile_name = 'RNO_season_2022.json'
+else:
+    outfile_name = 'RNO_season_2023.json'
 json.dump(
     detector_description,
-    open('RNO_season_2022.json', 'w'),
+    open(outfile_name, 'w'),
     indent=2
 )

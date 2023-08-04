@@ -7,7 +7,7 @@ import radiotools.helper
 
 
 det = NuRadioReco.detector.detector.Detector(
-    json_filename='RNO_season_2022.json'
+    json_filename='RNO_season_2023.json'
 )
 det.update(astropy.time.Time.now())
 station_ids = det.get_station_ids()
