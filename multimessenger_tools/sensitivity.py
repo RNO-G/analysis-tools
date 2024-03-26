@@ -310,7 +310,8 @@ class SensitivityCalculator:
         """
         # TODO: Use more accurate numbers
         self.summit_station = EarthLocation(lat=72.5 * u.deg, lon=-38.5 * u.deg, height=2800 * u.m)
-      
+        self._f_aeff = None
+
         if min_eff_area is not None or plot:
             test_zeniths = np.linspace(0, np.pi, 200)
             f_aeff, energy = get_effective_area_function(energy=1.1e18)
@@ -359,6 +360,11 @@ class SensitivityCalculator:
             fig.tight_layout()
             plt.savefig(fname)
 
+    def get_effective_area_function(self, **kwargs):
+        """ Wrapper around get_effective_area_function, caches function """
+        if self._f_aeff is None:
+           self._f_aeff = get_effective_area_function(**kwargs)
+        return self._f_aeff
     def is_in_fov(self, sky_corr, times):
         """ Wrapper around is_in_fov """
         return is_in_fov(sky_corr, times, self.summit_station, fov=self.zenith_limits)
