@@ -16,19 +16,118 @@ from NuRadioReco.utilities import units
 from NuRadioMC.utilities import cross_sections, fluxes
 
 
-def draw_zenith_angles_on_top_xaxis(
-        ax, xval="dmax",
-        theta=np.deg2rad([95, 75, 60, 45]), fontsize="medium"):
+def calculate_fluence_limit(a_eff, dt, e_min, e_max, gamma=2, num_events=2.3, differential=False):
+    """
+    Calculate a sensitivity limit for the neutrino fluence within a certain time window.
 
+    Parameters
+    ----------
+
+    a_eff: callable
+        Returns the effective area as a function of the energy (in eV).
+
+    dt: float
+        Time interval for which to calculate the fluence limit
+
+    e_min: float
+        Lower energy boundary
+
+    e_max: float
+        Upper energy boundary
+
+    gamma: float
+        Fixed spectral index. Only relevant if `differential == False`. (Default: 2)
+
+    num_events: float
+        Number of events defining the sensitivity. (Default: 2.3)
+
+    differential: bool
+        If True, calculate the differential limit in full decadale energy bins (each half decade). A E^-1 box spectrum is assumed in each energy bin.
+        Otherwise assume a single power law spectrum with the spectral index `gamma` is assumed. (Default: False)
+
+    Returns
+    -------
+
+    opt: float
+        The flux normalisation which describes the flux limit.
+
+    e: array of floats
+        The (central) energy values for the flux limit.
+
+    int_flux: array of floats
+        The flux limit times the time interval times the energy to the power of 2.
+    """
+
+    # flux model
+    def flux(energy, normalization, gamma=2, e0=100 * units.TeV):
+        return normalization * (energy / e0) ** -gamma * 1e-18 * (units.GeV ** -1 * units.cm ** -2 * units.second ** -1 * units.sr ** -1)
+
+    # numerical integration over flux * a_eff * dt in energy
+    def integrate_over_time_integrated_flux(norm, dt, a_eff, e_min, e_max, gamma=2):
+        res = integrate.quad(lambda e: flux(e, norm, gamma=gamma) * dt * a_eff(e), e_min, e_max)
+        return res[0]
+
+    # Helper function for optimize.brentq
+    def sensitivity_limit(norm, dt, a_eff, e_min, e_max, gamma, num_events):
+        return integrate_over_time_integrated_flux(norm, dt, a_eff, e_min, e_max, gamma=gamma) - num_events
+
+    if not differential:
+        # Power law limit
+        opt = optimize.brentq(sensitivity_limit, 1e-2, 1e8, args=(dt, a_eff, e_min, e_max, gamma, num_events))
+        e = np.geomspace(e_min, e_max)
+
+        int_flux = flux(e * units.eV, opt, gamma=gamma) * (e * units.eV) ** 2 * dt
+        return opt, e, int_flux
+
+    else:
+        # Piece-wise / differential limit
+        n_decades = np.log10(e_max / e_min)
+        if n_decades % 1 != 0:
+            raise ValueError()
+
+        energy_bins = np.log10(e_min) + np.arange(0, n_decades + 1, 0.5)
+        int_flux = []
+        e = []
+        opt = []
+        for e_min2 in energy_bins[:-1]:
+            e_max2 = e_min2 + 1
+            if e_max2 > np.log10(e_max):
+                continue
+
+            opt_dec, _, int_flux_dec = calculate_fluence_limit(a_eff, dt, 10 ** e_min2, 10 ** e_max2, gamma=1, num_events=num_events, differential=False)
+            opt.append(opt_dec)
+            int_flux.append(np.median(int_flux_dec))
+            e.append(10 ** (e_min2 + 0.5))
+
+        return np.array(opt), np.array(e), np.array(int_flux)
+
+
+def draw_zenith_angles_on_top_xaxis(
+        ax, theta=np.deg2rad([95, 75, 60, 45]), fontsize="medium"):
+    """
+    Draws a second x-axis at the top of the figure which shows
+    the theta values which corrspond to the cos(theta) values from the bottom
+    x-axis
+
+    Paramters
+    ---------
+
+    ax: `matplotlib.pyplot.axis`
+        The axis to plot a top x-axis on
+
+    theta: list/array of floats
+        Zenith angle values to draw (in radiants). (Default: np.deg2rad([95, 75, 60, 45]))
+
+    fontsize: str or int
+        Fontsize of the axis labels. (Default: "medium")
+    """
     ax2 = ax.twiny()
 
     ax2.set_xticks(np.cos(theta))
-    ax2.set_xticklabels([r"%.1f$^\circ$" %
-                        x for x in np.rad2deg(theta)], fontsize=fontsize)
-
+    ax2.set_xticklabels(
+        [r"%.1f$^\circ$" % x for x in np.rad2deg(theta)], fontsize=fontsize)
 
     ax2.set_xlim(ax.get_xlim())
-    # ax2.grid(**grid)
 
 
 def get_source_zenith(sky_corr, times, earth_location):
@@ -513,8 +612,9 @@ class SensitivityCalculator:
             self, sky_corr, time, time_window=24 * u.hour,
             dt=1 * u.min):
         """
-        Calculate the observation time, i.e., the time in which the source is within the FOV and the
-        average effective area for this time. Both are calculated within a given time range.
+        Calculate the observation time `t_obs`, i.e., the time in which the source is within the FOV, and the
+        average effective area `a_eff_avg` within `t_obs` (NOT within the specified `time_window`).
+        `time_window` specifies in which time window / period `t_obs` and `a_eff_avg` are calculated.
 
         Parameters
         ----------
@@ -598,23 +698,24 @@ class SensitivityCalculator:
         if kind == "flux":
             flux_limit = fluxes.get_limit_from_aeff(energies, a_eff_avg, livetime=t_obs_tot) * energies ** 2
             flux_limit = flux_limit / (units.TeV * units.cm ** -2 * units.second ** -1)
-            ax.plot(energies / units.PeV, flux_limit, label=label, **p_kwargs)
+            ax.plot(energies / units.GeV, flux_limit, label=label, **p_kwargs)
             ax.set_ylabel(r"$E_\nu^2 ~ \Phi_{\nu + \bar{\nu}} ~ / ~ TeV ~ cm^{-2} ~ s^{-1}$")
 
-        elif kind == "fluence":
+        # I do not think this is actually correct
+        # elif kind == "fluence":
 
-            fluence_limit = fluxes.get_limit_from_aeff(
-                energies, a_eff_avg, livetime=t_obs_tot) * energies ** 2 / (units.GeV * units.cm ** -2 * units.second ** -1)
+        #     fluence_limit = fluxes.get_limit_from_aeff(
+        #         energies, a_eff_avg, livetime=t_obs_tot) * energies ** 2 / (units.GeV * units.cm ** -2 * units.second ** -1)
 
-            ax.plot(energies / units.PeV, fluence_limit, label=label, **p_kwargs)
-            ax.set_ylabel(r"$E_\nu^2 ~ \Phi_{\nu + \bar{\nu}} ~ \cdot ~ \Delta T  ~ / ~ GeV ~ cm^{-2}$")
+        #     ax.plot(energies / units.GeV, fluence_limit, label=label, **p_kwargs)
+        #     ax.set_ylabel(r"$E_\nu^2 ~ \Phi_{\nu + \bar{\nu}} ~ \cdot ~ \Delta T  ~ / ~ GeV ~ cm^{-2}$")
 
         else:
-            raise ValueError(f"Unknown type for \"kind\": {kind} (valid are: \"flux\", \"fluence\")")
+            raise ValueError(f"Unknown type for \"kind\": {kind} (valid are: \"flux\")")
 
         ax.set_xscale("log")
         ax.set_yscale("log")
-        ax.set_xlabel(r"$E_\nu ~ / ~ PeV$")
+        ax.set_xlabel(r"$E_\nu ~ / ~ GeV$")
         ax.grid()
         ax.legend()
 
