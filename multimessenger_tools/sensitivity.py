@@ -287,8 +287,62 @@ def plot_sky_corr_in_altaz(
 
 def plot_effective_area_1d(ax):
     pass
-    
- 
+
+
+def transfrom_local_to_equitorial(location, zenith,
+                                  azimuth=np.linspace(-180, 180, 100, endpoint=False) * u.deg,
+                                  time=Time('2024-04-20 12:00:00', scale="ut1")):
+    """
+    Transforms local coordinates (zenith, azimuth) at a given location and time
+    into equatorial coordinates (right ascension, declination).
+
+    Parameters
+    ----------
+
+    location: `astropy.coordinates.EarthLocation`
+        Specify the location at Earth associated to the (zenith, azimuth) coordinates.
+
+    zenith: `astropy.unit.quantity.Quantity`
+        Specify the zenith angle of the coordinate.
+
+    azimuth: `astropy.unit.quantity.Quantity`
+        Specify the azimuth angle of the coordinate. Should be a list / array of angles.
+        (Default: `np.linspace(-180, 180, 100, endpoint=False) * u.deg`)
+
+    time: `astropy.time.Time`
+        Time of the local coordinate.
+
+    Returns
+    -------
+
+    ra: np.array
+        Right ascension of all local coordinates.
+
+    dec: np.array
+        Declination of all local coordinates.
+    """
+
+    if not isinstance(zenith, u.quantity.Quantity):
+        raise ValueError("Expects \"zenith\" to have a astropy unit "
+                         "(i.e., be of type astropy.unit.quantity.Quantity)")
+
+    if not isinstance(azimuth, u.quantity.Quantity):
+        raise ValueError("Expects \"azimuth\" to have a astropy unit "
+                         "(i.e., be of type astropy.unit.quantity.Quantity)")
+
+    ra = np.zeros(len(azimuth))
+    dec = np.zeros(len(azimuth))
+    for idx, azi in enumerate(azimuth):
+        # 180 is south
+        # alt angle is elevation angle (90 - zenith)
+        pos_aa = AltAz(az=azi, alt=90 * u.deg - zenith, obstime=time, location=location)
+        c = SkyCoord(pos_aa)
+        ra[idx] = c.transform_to('icrs').ra / u.deg
+        dec[idx] = c.transform_to('icrs').dec / u.deg
+
+    return ra, dec
+
+
 class SensitivityCalculator:
 
     def __init__(self, min_eff_area=0.001 * units.km2, zenith_limits=np.deg2rad([55, 90]), plot=False):
@@ -365,6 +419,13 @@ class SensitivityCalculator:
         if self._f_aeff is None:
            self._f_aeff = get_effective_area_function(**kwargs)
         return self._f_aeff
+
+    def transfrom_local_to_equitorial(
+            self, zenith, time=Time('2024-04-20 12:00:00', scale="ut1"),
+            azimuth=np.linspace(-180, 180, 100, endpoint=False) * u.deg):
+        """ Wrapper around transfrom_local_to_equitorial """
+        return transfrom_local_to_equitorial(self.summit_station, zenith, time, azimuth)
+
     def is_in_fov(self, sky_corr, times):
         """ Wrapper around is_in_fov """
         return is_in_fov(sky_corr, times, self.summit_station, fov=self.zenith_limits)
