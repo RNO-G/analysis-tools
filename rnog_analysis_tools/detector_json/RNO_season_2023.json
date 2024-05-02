@@ -11,7 +11,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -96.215,
       "amp_type": "iglu",
-      "cab_time_delay": 714.4923798064285,
+      "cab_time_delay": 716.2603798064285,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2021-07-11T00:00:00",
@@ -29,7 +29,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -95.174,
       "amp_type": "iglu",
-      "cab_time_delay": 709.9935958304959,
+      "cab_time_delay": 711.7615958304959,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2021-07-11T00:00:00",
@@ -47,7 +47,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -94.183,
       "amp_type": "iglu",
-      "cab_time_delay": 704.7279049211579,
+      "cab_time_delay": 706.495904921158,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2021-07-11T00:00:00",
@@ -65,7 +65,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -93.155,
       "amp_type": "iglu",
-      "cab_time_delay": 700.4277318007989,
+      "cab_time_delay": 702.195731800799,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2021-07-11T00:00:00",
@@ -327,9 +327,9 @@
     "18": {
       "station_id": 11,
       "channel_id": 12,
-      "ant_rotation_phi": 243.0,
+      "ant_rotation_phi": 220.0,
       "ant_rotation_theta": 90.0,
-      "ant_orientation_phi": 333.0,
+      "ant_orientation_phi": 310.0,
       "ant_orientation_theta": 120.0,
       "ant_position_x": 25.245374429777485,
       "ant_position_y": -9.271898202581497,
@@ -345,7 +345,7 @@
     "19": {
       "station_id": 11,
       "channel_id": 13,
-      "ant_rotation_phi": 243.0,
+      "ant_rotation_phi": 220.0,
       "ant_rotation_theta": 90.0,
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -363,9 +363,9 @@
     "20": {
       "station_id": 11,
       "channel_id": 14,
-      "ant_rotation_phi": 243.0,
+      "ant_rotation_phi": 220.0,
       "ant_rotation_theta": 90.0,
-      "ant_orientation_phi": 153.0,
+      "ant_orientation_phi": 130.0,
       "ant_orientation_theta": 120.0,
       "ant_position_x": 23.709240577868513,
       "ant_position_y": -4.359449327425068,
@@ -381,9 +381,9 @@
     "21": {
       "station_id": 11,
       "channel_id": 15,
-      "ant_rotation_phi": 351.0,
+      "ant_rotation_phi": 328.0,
       "ant_rotation_theta": 90.0,
-      "ant_orientation_phi": 81.0,
+      "ant_orientation_phi": 58.0,
       "ant_orientation_theta": 120.0,
       "ant_position_x": 13.659226614984846,
       "ant_position_y": -4.116966752974577,
@@ -399,7 +399,7 @@
     "22": {
       "station_id": 11,
       "channel_id": 16,
-      "ant_rotation_phi": 351.0,
+      "ant_rotation_phi": 328.0,
       "ant_rotation_theta": 90.0,
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -417,9 +417,9 @@
     "23": {
       "station_id": 11,
       "channel_id": 17,
-      "ant_rotation_phi": 351.0,
+      "ant_rotation_phi": 328.0,
       "ant_rotation_theta": 90.0,
-      "ant_orientation_phi": 261.0,
+      "ant_orientation_phi": 238.0,
       "ant_orientation_theta": 120.0,
       "ant_position_x": 11.212162270289355,
       "ant_position_y": -9.197601282929554,
@@ -551,7 +551,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -94.209,
       "amp_type": "iglu",
-      "cab_time_delay": 716.0848684487527,
+      "cab_time_delay": 717.8528684487527,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2022-06-16T00:00:00",
@@ -569,7 +569,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -93.243,
       "amp_type": "iglu",
-      "cab_time_delay": 710.0,
+      "cab_time_delay": 711.768,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2022-06-16T00:00:00",
@@ -587,7 +587,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -92.24,
       "amp_type": "iglu",
-      "cab_time_delay": 705.9547809582946,
+      "cab_time_delay": 707.7227809582946,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2022-06-16T00:00:00",
@@ -605,7 +605,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -91.262,
       "amp_type": "iglu",
-      "cab_time_delay": 701.837187725609,
+      "cab_time_delay": 703.6051877256091,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2022-06-16T00:00:00",
@@ -875,7 +875,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -96.266,
       "amp_type": "iglu",
-      "cab_time_delay": 714.7889003542323,
+      "cab_time_delay": 716.5569003542323,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2022-06-30T00:00:00",
@@ -893,7 +893,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -95.25,
       "amp_type": "iglu",
-      "cab_time_delay": 710.125994185995,
+      "cab_time_delay": 711.893994185995,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2022-06-30T00:00:00",
@@ -911,7 +911,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -94.259,
       "amp_type": "iglu",
-      "cab_time_delay": 704.907717791364,
+      "cab_time_delay": 706.675717791364,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2022-06-30T00:00:00",
@@ -929,7 +929,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -93.218,
       "amp_type": "iglu",
-      "cab_time_delay": 700.5047756955887,
+      "cab_time_delay": 702.2727756955887,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2022-06-30T00:00:00",
@@ -1307,7 +1307,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -95.37,
       "amp_type": "iglu",
-      "cab_time_delay": 714.4660516693513,
+      "cab_time_delay": 716.2340516693513,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2021-07-04T00:00:00",
@@ -1325,7 +1325,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -94.37,
       "amp_type": "iglu",
-      "cab_time_delay": 709.9058111253712,
+      "cab_time_delay": 711.6738111253712,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2021-07-04T00:00:00",
@@ -1343,7 +1343,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -93.36,
       "amp_type": "iglu",
-      "cab_time_delay": 704.5363868097872,
+      "cab_time_delay": 706.3043868097873,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2021-07-04T00:00:00",
@@ -1361,7 +1361,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -92.36,
       "amp_type": "iglu",
-      "cab_time_delay": 700.3521325816487,
+      "cab_time_delay": 702.1201325816487,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2021-07-04T00:00:00",
@@ -1569,9 +1569,9 @@
     "87": {
       "station_id": 21,
       "channel_id": 15,
-      "ant_rotation_phi": 254.0,
+      "ant_rotation_phi": 277.0,
       "ant_rotation_theta": 90.0,
-      "ant_orientation_phi": 164.0,
+      "ant_orientation_phi": 187.0,
       "ant_orientation_theta": 120.0,
       "ant_position_x": -20.913616334864287,
       "ant_position_y": 16.537611216532184,
@@ -1587,7 +1587,7 @@
     "88": {
       "station_id": 21,
       "channel_id": 16,
-      "ant_rotation_phi": 254.0,
+      "ant_rotation_phi": 277.0,
       "ant_rotation_theta": 90.0,
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -1605,9 +1605,9 @@
     "89": {
       "station_id": 21,
       "channel_id": 17,
-      "ant_rotation_phi": 254.0,
+      "ant_rotation_phi": 277.0,
       "ant_rotation_theta": 90.0,
-      "ant_orientation_phi": 344.0,
+      "ant_orientation_phi": 7.0,
       "ant_orientation_theta": 120.0,
       "ant_position_x": -15.404148418065631,
       "ant_position_y": 17.46318633982372,
@@ -1623,9 +1623,9 @@
     "90": {
       "station_id": 21,
       "channel_id": 14,
-      "ant_rotation_phi": 65.0,
+      "ant_rotation_phi": 42.0,
       "ant_rotation_theta": 90.0,
-      "ant_orientation_phi": 155.0,
+      "ant_orientation_phi": 132.0,
       "ant_orientation_theta": 120.0,
       "ant_position_x": -25.02971666518448,
       "ant_position_y": 7.293175091846081,
@@ -1641,7 +1641,7 @@
     "91": {
       "station_id": 21,
       "channel_id": 13,
-      "ant_rotation_phi": 65.0,
+      "ant_rotation_phi": 42.0,
       "ant_rotation_theta": 90.0,
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -1659,9 +1659,9 @@
     "92": {
       "station_id": 21,
       "channel_id": 12,
-      "ant_rotation_phi": 65.0,
+      "ant_rotation_phi": 42.0,
       "ant_rotation_theta": 90.0,
-      "ant_orientation_phi": 335.0,
+      "ant_orientation_phi": 312.0,
       "ant_orientation_theta": 120.0,
       "ant_position_x": -22.479689741668324,
       "ant_position_y": 2.80783833285102,
@@ -1677,9 +1677,9 @@
     "93": {
       "station_id": 21,
       "channel_id": 20,
-      "ant_rotation_phi": 118.0,
+      "ant_rotation_phi": 141.0,
       "ant_rotation_theta": 90.0,
-      "ant_orientation_phi": 208.0,
+      "ant_orientation_phi": 231.0,
       "ant_orientation_theta": 120.0,
       "ant_position_x": -11.266588048738129,
       "ant_position_y": 2.9011467712219314,
@@ -1695,7 +1695,7 @@
     "94": {
       "station_id": 21,
       "channel_id": 19,
-      "ant_rotation_phi": 118.0,
+      "ant_rotation_phi": 141.0,
       "ant_rotation_theta": 90.0,
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -1713,9 +1713,9 @@
     "95": {
       "station_id": 21,
       "channel_id": 18,
-      "ant_rotation_phi": 118.0,
+      "ant_rotation_phi": 141.0,
       "ant_rotation_theta": 90.0,
-      "ant_orientation_phi": 28.0,
+      "ant_orientation_phi": 51.0,
       "ant_orientation_theta": 120.0,
       "ant_position_x": -8.513397338379718,
       "ant_position_y": 7.724537269470318,
@@ -1847,7 +1847,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -95.67,
       "amp_type": "iglu",
-      "cab_time_delay": 714.7593297729006,
+      "cab_time_delay": 716.5273297729007,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2021-07-01T00:00:00",
@@ -1865,7 +1865,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -94.66,
       "amp_type": "iglu",
-      "cab_time_delay": 710.1658529670598,
+      "cab_time_delay": 711.9338529670598,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2021-07-01T00:00:00",
@@ -1883,7 +1883,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -93.66,
       "amp_type": "iglu",
-      "cab_time_delay": 704.9040443161012,
+      "cab_time_delay": 706.6720443161013,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2021-07-01T00:00:00",
@@ -1901,7 +1901,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -92.66,
       "amp_type": "iglu",
-      "cab_time_delay": 700.4520344958491,
+      "cab_time_delay": 702.2200344958492,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2021-07-01T00:00:00",
@@ -2171,7 +2171,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -94.717,
       "amp_type": "iglu",
-      "cab_time_delay": 715.2854637454359,
+      "cab_time_delay": 717.0534637454359,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2022-06-23T00:00:00",
@@ -2189,7 +2189,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -93.751,
       "amp_type": "iglu",
-      "cab_time_delay": 710.6324767769894,
+      "cab_time_delay": 712.4004767769894,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2022-06-23T00:00:00",
@@ -2207,7 +2207,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -92.735,
       "amp_type": "iglu",
-      "cab_time_delay": 705.3844946995908,
+      "cab_time_delay": 707.1524946995909,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2022-06-23T00:00:00",
@@ -2225,7 +2225,7 @@
       "ant_position_y": 0.0,
       "ant_position_z": -91.745,
       "amp_type": "iglu",
-      "cab_time_delay": 701.0937993250889,
+      "cab_time_delay": 702.8617993250889,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2022-06-23T00:00:00",
@@ -2270,7 +2270,7 @@
     },
     "126": {
       "station_id": 23,
-      "channel_id": 6,
+      "channel_id": 7,
       "ant_rotation_phi": 90.0,
       "ant_rotation_theta": 90.0,
       "ant_orientation_phi": 0.0,
@@ -2288,7 +2288,7 @@
     },
     "127": {
       "station_id": 23,
-      "channel_id": 7,
+      "channel_id": 6,
       "ant_rotation_phi": 90.0,
       "ant_rotation_theta": 90.0,
       "ant_orientation_phi": 0.0,
@@ -2468,6 +2468,24 @@
     },
     "137": {
       "station_id": 23,
+      "channel_id": 12,
+      "ant_rotation_phi": 270.0,
+      "ant_rotation_theta": 90.0,
+      "ant_orientation_phi": 0.0,
+      "ant_orientation_theta": 120.0,
+      "ant_position_x": -13.716551579004388,
+      "ant_position_y": 17.24043830214714,
+      "ant_position_z": -0.5,
+      "amp_type": "rno_surface",
+      "cab_time_delay": 45.78713480723031,
+      "adc_n_samples": 2048,
+      "adc_sampling_frequency": 3.2,
+      "commission_time": "{TinyDate}:2022-06-24T00:00:00",
+      "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
+      "ant_type": "createLPDA_100MHz_InfFirn_n1.4"
+    },
+    "138": {
+      "station_id": 23,
       "channel_id": 20,
       "ant_rotation_phi": 150.0,
       "ant_rotation_theta": 90.0,
@@ -2484,7 +2502,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "createLPDA_100MHz_InfFirn_n1.4"
     },
-    "138": {
+    "139": {
       "station_id": 23,
       "channel_id": 19,
       "ant_rotation_phi": 150.0,
@@ -2502,7 +2520,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "createLPDA_100MHz_InfFirn_n1.4"
     },
-    "139": {
+    "140": {
       "station_id": 23,
       "channel_id": 18,
       "ant_rotation_phi": 150.0,
@@ -2520,7 +2538,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "createLPDA_100MHz_InfFirn_n1.4"
     },
-    "140": {
+    "141": {
       "station_id": 23,
       "channel_id": 17,
       "ant_rotation_phi": 30.0,
@@ -2538,7 +2556,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "createLPDA_100MHz_InfFirn_n1.4"
     },
-    "141": {
+    "142": {
       "station_id": 23,
       "channel_id": 16,
       "ant_rotation_phi": 30.0,
@@ -2556,7 +2574,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "createLPDA_100MHz_InfFirn_n1.4"
     },
-    "142": {
+    "143": {
       "station_id": 23,
       "channel_id": 15,
       "ant_rotation_phi": 30.0,
@@ -2574,7 +2592,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "createLPDA_100MHz_InfFirn_n1.4"
     },
-    "143": {
+    "144": {
       "station_id": 24,
       "channel_id": 9,
       "ant_rotation_phi": 90.0,
@@ -2592,7 +2610,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "RNOG_vpol_4inch_center_n1.73"
     },
-    "144": {
+    "145": {
       "station_id": 24,
       "channel_id": 10,
       "ant_rotation_phi": 90.0,
@@ -2610,7 +2628,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "RNOG_vpol_4inch_center_n1.73"
     },
-    "145": {
+    "146": {
       "station_id": 24,
       "channel_id": 11,
       "ant_rotation_phi": 90.0,
@@ -2628,7 +2646,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "RNOG_quadslot_v3_air_rescaled_to_n1.74"
     },
-    "146": {
+    "147": {
       "station_id": 24,
       "channel_id": 0,
       "ant_rotation_phi": 90.0,
@@ -2639,14 +2657,14 @@
       "ant_position_y": 0.0,
       "ant_position_z": -97.638,
       "amp_type": "iglu",
-      "cab_time_delay": 714.9553780139191,
+      "cab_time_delay": 716.7233780139192,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2022-07-05T00:00:00",
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "RNOG_vpol_4inch_center_n1.73"
     },
-    "147": {
+    "148": {
       "station_id": 24,
       "channel_id": 1,
       "ant_rotation_phi": 90.0,
@@ -2657,14 +2675,14 @@
       "ant_position_y": 0.0,
       "ant_position_z": -96.622,
       "amp_type": "iglu",
-      "cab_time_delay": 710.3364846158909,
+      "cab_time_delay": 712.1044846158909,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2022-07-05T00:00:00",
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "RNOG_vpol_4inch_center_n1.73"
     },
-    "148": {
+    "149": {
       "station_id": 24,
       "channel_id": 2,
       "ant_rotation_phi": 90.0,
@@ -2675,14 +2693,14 @@
       "ant_position_y": 0.0,
       "ant_position_z": -95.631,
       "amp_type": "iglu",
-      "cab_time_delay": 705.1212411537641,
+      "cab_time_delay": 706.8892411537641,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2022-07-05T00:00:00",
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "RNOG_vpol_4inch_center_n1.73"
     },
-    "149": {
+    "150": {
       "station_id": 24,
       "channel_id": 3,
       "ant_rotation_phi": 90.0,
@@ -2693,14 +2711,14 @@
       "ant_position_y": 0.0,
       "ant_position_z": -94.615,
       "amp_type": "iglu",
-      "cab_time_delay": 700.6546072909622,
+      "cab_time_delay": 702.4226072909622,
       "adc_n_samples": 2048,
       "adc_sampling_frequency": 3.2,
       "commission_time": "{TinyDate}:2022-07-05T00:00:00",
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "RNOG_vpol_4inch_center_n1.73"
     },
-    "150": {
+    "151": {
       "station_id": 24,
       "channel_id": 4,
       "ant_rotation_phi": 90.0,
@@ -2718,7 +2736,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "RNOG_quadslot_v3_air_rescaled_to_n1.74"
     },
-    "151": {
+    "152": {
       "station_id": 24,
       "channel_id": 5,
       "ant_rotation_phi": 90.0,
@@ -2736,7 +2754,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "RNOG_vpol_4inch_center_n1.73"
     },
-    "152": {
+    "153": {
       "station_id": 24,
       "channel_id": 6,
       "ant_rotation_phi": 90.0,
@@ -2754,7 +2772,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "RNOG_vpol_4inch_center_n1.73"
     },
-    "153": {
+    "154": {
       "station_id": 24,
       "channel_id": 7,
       "ant_rotation_phi": 90.0,
@@ -2772,7 +2790,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "RNOG_vpol_4inch_center_n1.73"
     },
-    "154": {
+    "155": {
       "station_id": 24,
       "channel_id": 8,
       "ant_rotation_phi": 90.0,
@@ -2790,7 +2808,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "RNOG_quadslot_v3_air_rescaled_to_n1.74"
     },
-    "155": {
+    "156": {
       "station_id": 24,
       "channel_id": 21,
       "ant_rotation_phi": 90.0,
@@ -2808,7 +2826,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "RNOG_quadslot_v3_air_rescaled_to_n1.74"
     },
-    "156": {
+    "157": {
       "station_id": 24,
       "channel_id": 22,
       "ant_rotation_phi": 90.0,
@@ -2826,7 +2844,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "RNOG_vpol_4inch_center_n1.73"
     },
-    "157": {
+    "158": {
       "station_id": 24,
       "channel_id": 23,
       "ant_rotation_phi": 90.0,
@@ -2844,7 +2862,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "RNOG_vpol_4inch_center_n1.73"
     },
-    "158": {
+    "159": {
       "station_id": 24,
       "channel_id": 15,
       "ant_rotation_phi": 330.0,
@@ -2862,7 +2880,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "createLPDA_100MHz_InfFirn_n1.4"
     },
-    "159": {
+    "160": {
       "station_id": 24,
       "channel_id": 16,
       "ant_rotation_phi": 330.0,
@@ -2880,7 +2898,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "createLPDA_100MHz_InfFirn_n1.4"
     },
-    "160": {
+    "161": {
       "station_id": 24,
       "channel_id": 17,
       "ant_rotation_phi": 330.0,
@@ -2898,7 +2916,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "createLPDA_100MHz_InfFirn_n1.4"
     },
-    "161": {
+    "162": {
       "station_id": 24,
       "channel_id": 18,
       "ant_rotation_phi": 90.0,
@@ -2916,7 +2934,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "createLPDA_100MHz_InfFirn_n1.4"
     },
-    "162": {
+    "163": {
       "station_id": 24,
       "channel_id": 19,
       "ant_rotation_phi": 90.0,
@@ -2934,7 +2952,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "createLPDA_100MHz_InfFirn_n1.4"
     },
-    "163": {
+    "164": {
       "station_id": 24,
       "channel_id": 20,
       "ant_rotation_phi": 90.0,
@@ -2952,7 +2970,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "createLPDA_100MHz_InfFirn_n1.4"
     },
-    "164": {
+    "165": {
       "station_id": 24,
       "channel_id": 12,
       "ant_rotation_phi": 210.0,
@@ -2970,7 +2988,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "createLPDA_100MHz_InfFirn_n1.4"
     },
-    "165": {
+    "166": {
       "station_id": 24,
       "channel_id": 13,
       "ant_rotation_phi": 210.0,
@@ -2988,7 +3006,7 @@
       "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
       "ant_type": "createLPDA_100MHz_InfFirn_n1.4"
     },
-    "166": {
+    "167": {
       "station_id": 24,
       "channel_id": 14,
       "ant_rotation_phi": 210.0,
@@ -3073,7 +3091,29 @@
     }
   },
   "devices": {
+    "0": {
+      "station_id": 11,
+      "ant_comment": "Solar1",
+      "ant_position_x": 13.36132853368872,
+      "ant_position_y": -11.48713138132041,
+      "ant_position_z": 2.0,
+      "pos_site": "summit",
+      "commission_time": "{TinyDate}:2021-07-11T00:00:00",
+      "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
+      "device_id": 51
+    },
     "1": {
+      "station_id": 11,
+      "ant_comment": "Solar2",
+      "ant_position_x": 21.43206761388069,
+      "ant_position_y": -10.44439371321073,
+      "ant_position_z": 2.0,
+      "pos_site": "summit",
+      "commission_time": "{TinyDate}:2021-07-11T00:00:00",
+      "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
+      "device_id": 52
+    },
+    "3": {
       "ant_comment": "Helper String B Cal Vpol",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -3087,7 +3127,7 @@
       "device_id": 1,
       "station_id": 11
     },
-    "0": {
+    "2": {
       "ant_comment": "Helper String C Cal Vpol",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -3101,7 +3141,7 @@
       "device_id": 0,
       "station_id": 11
     },
-    "2": {
+    "4": {
       "ant_comment": "Surface Cal Pulser",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -3115,7 +3155,29 @@
       "device_id": 2,
       "station_id": 11
     },
-    "4": {
+    "5": {
+      "station_id": 12,
+      "ant_comment": "Solar1",
+      "ant_position_x": 3.176778224476493,
+      "ant_position_y": 20.049944351541626,
+      "ant_position_z": 2.0,
+      "pos_site": "summit",
+      "commission_time": "{TinyDate}:2022-06-21T00:00:00",
+      "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
+      "device_id": 51
+    },
+    "6": {
+      "station_id": 12,
+      "ant_comment": "Solar2",
+      "ant_position_x": -3.747691525486289,
+      "ant_position_y": 20.40075131947856,
+      "ant_position_z": 2.0,
+      "pos_site": "summit",
+      "commission_time": "{TinyDate}:2022-06-21T00:00:00",
+      "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
+      "device_id": 52
+    },
+    "8": {
       "ant_comment": "Helper String B Cal Vpol",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -3129,7 +3191,7 @@
       "device_id": 1,
       "station_id": 12
     },
-    "3": {
+    "7": {
       "ant_comment": "Helper String C Cal Vpol",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -3143,7 +3205,7 @@
       "device_id": 0,
       "station_id": 12
     },
-    "5": {
+    "9": {
       "ant_comment": "Surface Cal Pulser",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -3157,7 +3219,29 @@
       "device_id": 2,
       "station_id": 12
     },
-    "7": {
+    "10": {
+      "station_id": 13,
+      "ant_comment": "Solar1",
+      "ant_position_x": -4.105543025558518,
+      "ant_position_y": 19.86872242372283,
+      "ant_position_z": 2.0,
+      "pos_site": "summit",
+      "commission_time": "{TinyDate}:2022-07-04T00:00:00",
+      "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
+      "device_id": 51
+    },
+    "11": {
+      "station_id": 13,
+      "ant_comment": "Solar2",
+      "ant_position_x": -1.2175798336297703,
+      "ant_position_y": 23.709661860820233,
+      "ant_position_z": 2.0,
+      "pos_site": "summit",
+      "commission_time": "{TinyDate}:2022-07-04T00:00:00",
+      "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
+      "device_id": 52
+    },
+    "13": {
       "ant_comment": "Helper String B Cal Vpol",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -3171,7 +3255,7 @@
       "device_id": 1,
       "station_id": 13
     },
-    "6": {
+    "12": {
       "ant_comment": "Helper String C Cal Vpol",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -3185,7 +3269,7 @@
       "device_id": 0,
       "station_id": 13
     },
-    "8": {
+    "14": {
       "ant_comment": "Surface Cal Pulser",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -3199,7 +3283,29 @@
       "device_id": 2,
       "station_id": 13
     },
-    "10": {
+    "15": {
+      "station_id": 21,
+      "ant_comment": "Solar1",
+      "ant_position_x": -14.35348202765249,
+      "ant_position_y": 10.869027057073652,
+      "ant_position_z": 2.0,
+      "pos_site": "summit",
+      "commission_time": "{TinyDate}:2021-07-04T00:00:00",
+      "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
+      "device_id": 51
+    },
+    "16": {
+      "station_id": 21,
+      "ant_comment": "Solar2",
+      "ant_position_x": -20.00309913297025,
+      "ant_position_y": 8.88120258810676,
+      "ant_position_z": 2.0,
+      "pos_site": "summit",
+      "commission_time": "{TinyDate}:2021-07-04T00:00:00",
+      "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
+      "device_id": 52
+    },
+    "18": {
       "ant_comment": "Helper String B Cal Vpol",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -3213,7 +3319,7 @@
       "device_id": 1,
       "station_id": 21
     },
-    "9": {
+    "17": {
       "ant_comment": "Helper String C Cal Vpol",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -3227,7 +3333,7 @@
       "device_id": 0,
       "station_id": 21
     },
-    "11": {
+    "19": {
       "ant_comment": "Surface Cal Pulser",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -3241,7 +3347,29 @@
       "device_id": 2,
       "station_id": 21
     },
-    "13": {
+    "20": {
+      "station_id": 22,
+      "ant_comment": "Solar1",
+      "ant_position_x": -3.0004659456469085,
+      "ant_position_y": 18.413899935242398,
+      "ant_position_z": 2.0,
+      "pos_site": "summit",
+      "commission_time": "{TinyDate}:2021-07-01T00:00:00",
+      "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
+      "device_id": 51
+    },
+    "21": {
+      "station_id": 22,
+      "ant_comment": "Solar2",
+      "ant_position_x": 3.9343587962490574,
+      "ant_position_y": 19.991810790975478,
+      "ant_position_z": 2.0,
+      "pos_site": "summit",
+      "commission_time": "{TinyDate}:2021-07-01T00:00:00",
+      "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
+      "device_id": 52
+    },
+    "23": {
       "ant_comment": "Helper String B Cal Vpol",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -3255,7 +3383,7 @@
       "device_id": 1,
       "station_id": 22
     },
-    "12": {
+    "22": {
       "ant_comment": "Helper String C Cal Vpol",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -3269,7 +3397,7 @@
       "device_id": 0,
       "station_id": 22
     },
-    "14": {
+    "24": {
       "ant_comment": "Surface Cal Pulser",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -3283,7 +3411,29 @@
       "device_id": 2,
       "station_id": 22
     },
-    "16": {
+    "25": {
+      "station_id": 23,
+      "ant_comment": "Solar1",
+      "ant_position_x": -19.53408010420692,
+      "ant_position_y": 10.635884447027365,
+      "ant_position_z": 2.0,
+      "pos_site": "summit",
+      "commission_time": "{TinyDate}:2022-06-26T00:00:00",
+      "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
+      "device_id": 51
+    },
+    "26": {
+      "station_id": 23,
+      "ant_comment": "Solar2",
+      "ant_position_x": -14.665758264097192,
+      "ant_position_y": 11.835641082987422,
+      "ant_position_z": 2.0,
+      "pos_site": "summit",
+      "commission_time": "{TinyDate}:2022-06-26T00:00:00",
+      "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
+      "device_id": 52
+    },
+    "28": {
       "ant_comment": "Helper String B Cal Vpol",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -3297,7 +3447,7 @@
       "device_id": 1,
       "station_id": 23
     },
-    "15": {
+    "27": {
       "ant_comment": "Helper String C Cal Vpol",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -3311,7 +3461,7 @@
       "device_id": 0,
       "station_id": 23
     },
-    "17": {
+    "29": {
       "ant_comment": "Surface Cal Pulser",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -3325,7 +3475,29 @@
       "device_id": 2,
       "station_id": 23
     },
-    "19": {
+    "30": {
+      "station_id": 24,
+      "ant_comment": "Solar1",
+      "ant_position_x": 3.85210728828622,
+      "ant_position_y": 19.83569129735497,
+      "ant_position_z": 2.0,
+      "pos_site": "summit",
+      "commission_time": "{TinyDate}:2022-07-12T00:00:00",
+      "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
+      "device_id": 51
+    },
+    "31": {
+      "station_id": 24,
+      "ant_comment": "Solar2",
+      "ant_position_x": 0.9856824455048354,
+      "ant_position_y": 23.58770527141769,
+      "ant_position_z": 2.0,
+      "pos_site": "summit",
+      "commission_time": "{TinyDate}:2022-07-12T00:00:00",
+      "decommission_time": "{TinyDate}:2035-11-01T00:00:00",
+      "device_id": 52
+    },
+    "33": {
       "ant_comment": "Helper String B Cal Vpol",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -3339,7 +3511,7 @@
       "device_id": 1,
       "station_id": 24
     },
-    "18": {
+    "32": {
       "ant_comment": "Helper String C Cal Vpol",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,
@@ -3353,7 +3525,7 @@
       "device_id": 0,
       "station_id": 24
     },
-    "20": {
+    "34": {
       "ant_comment": "Surface Cal Pulser",
       "ant_orientation_phi": 0.0,
       "ant_orientation_theta": 0.0,

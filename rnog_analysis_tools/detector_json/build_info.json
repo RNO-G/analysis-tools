@@ -88,7 +88,12 @@
         "18": 90.0,
         "19": 90.0,
         "20": 90.0
+      },
+      "magnetic_correction": {
+        "plus": [],
+        "minus": [12, 13, 14, 15, 16, 17]
       }
+
   },
   "12": {
       "gps_results_file": "gps_results/site_12_terrianiaq_survey_results_final.csv",
@@ -214,6 +219,10 @@
         "18": 118.0,
         "19": 118.0,
         "20": 118.0
+      },
+      "magnetic_correction": {
+        "plus": [15, 16, 17, 18, 19, 20],
+        "minus": [12, 13, 14]
       }
   },
 
@@ -262,6 +271,7 @@
         "19": 81.0,
         "20": 81.0
       }
+
   },
   "23": {
       "gps_results_file": "gps_results/20220714_station23_survey_results.csv",

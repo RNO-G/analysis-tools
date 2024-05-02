@@ -12,7 +12,9 @@
         "LPDA 6": ["lpda 7"],
         "LPDA 5": ["lpda8"],
         "LPDA 4": ["lpda 9"],
-        "Surface Pulser": ["surface tx 1", "surfae tx 2", "surfsce tx mid"]
+        "Surface Pulser": ["surface tx 1", "surfae tx 2", "surfsce tx mid"],
+        "Solar1": ["sol pan 1a", "sol pan 1a"],
+        "Solar2": ["sol pan 2a", "sol pan 2b"]
     },
     "12": {
         "Helper B": ["hole 1 middle", "hole 1 side"],
@@ -27,7 +29,9 @@
         "LPDA 3": ["lpda 7 height 170"],
         "LPDA 2": ["lpda 8"],
         "LPDA 1": ["lpda 9"],
-        "Surface Pulser": ["misc flag (pulser?)"]
+        "Surface Pulser": ["misc flag (pulser?)"],
+        "Solar1": ["solar panel top corn 1", "solar panel top corn 2"],
+        "Solar2": ["solar panel 2 corn 1", "solar panel 2 corn 2"]
     },
     "13": {
         "Power A": ["power side", "power mid"],
@@ -42,7 +46,9 @@
         "LPDA 1": ["lpda 7"],
         "LPDA 2": ["lpda 8"],
         "LPDA 3": ["lpda 9"],
-        "Surface Pulser": ["pulser"]
+        "Surface Pulser": ["pulser"],
+        "Solar1": ["sol pan 1a", "s pan 1b"],
+        "Solar2": ["sol pan 2a", "sol pan 2b"]
     },
     "21": {
         "Power A": ["power side", "power side2", "power mod"],
@@ -57,7 +63,9 @@
         "LPDA 1": ["lpda 7"],
         "LPDA 2": ["lpda 8"],
         "LPDA 3": ["lpda 9"],
-        "Surface Pulser": ["cal hole"]
+        "Surface Pulser": ["cal hole"],
+        "Solar1": ["sol pan 1a", "sol pan 1b"],
+        "Solar2": ["sol pan 2a", "sol pan 2b"]
     },
     "22": {
         "Helper B": ["hole 1"],
@@ -71,7 +79,9 @@
         "LPDA 2": ["lpda 6"],
         "LPDA 7": ["lpda 7"],
         "LPDA 9": ["lpda 8"],
-        "LPDA 3": ["lpda 9"]
+        "LPDA 3": ["lpda 9"],
+        "Solar1": ["sol pan 1a", "sol pan 1b"],
+        "Solar2": ["sol pan 2a", "sol pan 2b"]
     },
     "23": {
         "Power A": ["pow side", "pow mid"],
@@ -79,14 +89,16 @@
         "Helper C": ["help c side", "help c sode", "help c mid"],
         "LPDA 7": ["lpda 1"],
         "LPDA 8": ["lpda 2"],
-        "LDPA 9": ["lpda 3"],
+        "LPDA 9": ["lpda 3"],
         "LPDA 1": ["lpds 4"],
         "LPDA 2": ["lpda 5"],
         "LPDA 3": ["lpda 6"],
         "LPDA 4": ["lpda 7"],
         "LPDA 5": ["lpda 8"],
         "LPDA 6": ["lpda 9"],
-        "Surface Pulser": ["surf pulse mid"]
+        "Surface Pulser": ["surf pulse mid"],
+        "Solar1": ["sol pan 2n", "sol pan 2a"],
+        "Solar2": ["sol pan 1b", "sol pan 1b"]
     },
     "24": {
         "Helper B": ["hole 1 side", "hole 1side", "hole 1 mid"],
@@ -101,6 +113,8 @@
         "LPDA 9": ["lpda 7"],
         "LPDA 8": ["lpda 8"],
         "LPDA 7": ["lpda 9"],
-        "Surface Pulser": ["pulser"]
+        "Surface Pulser": ["pulser"],
+        "Solar1": ["sol pan 1a", "sol pan 1b"],
+        "Solar2": ["sol pan 2a", "sol pan 2b"]
     }
 }
