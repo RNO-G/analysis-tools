@@ -1,5 +1,6 @@
 import numpy as np
 import pymap3d.enu
+import pymap3d.ellipsoid
 import os.path
 import json
 
@@ -27,6 +28,7 @@ class CoordinateSystem:
             os.path.dirname(os.path.realpath(__file__)),
             'coordinate_origins.json'
         )
+        self.__ellipsoid = pymap3d.ellipsoid.Ellipsoid.from_name('wgs84')
         with open(filename, 'r') as json_file:
             self.__origin = np.array(json.load(json_file)[origin][str(year)])
 
@@ -35,7 +37,7 @@ class CoordinateSystem:
             latitude,
             longitude,
             height=3260.,
-            deg=True
+            deg=True,
     ):
         """
         Convert from geodetic coordinates (latitude, longitude, elevation)
@@ -63,7 +65,7 @@ class CoordinateSystem:
             origin[0],
             origin[1],
             origin[2],
-            None,
+            self.__ellipsoid,
             deg
         )
 
@@ -99,7 +101,7 @@ class CoordinateSystem:
             origin[0],
             origin[1],
             origin[2],
-            None,
+            self.__ellipsoid,
             deg
         )
 
@@ -135,7 +137,7 @@ class CoordinateSystem:
             origin[0],
             origin[1],
             origin[2],
-            None,
+            self.__ellipsoid,
             deg
         )
         new_origin = np.copy(self.__origin)
@@ -148,7 +150,7 @@ class CoordinateSystem:
             new_origin[0],
             new_origin[1],
             new_origin[2],
-            None,
+            self.__ellipsoid,
             deg
         )
 
