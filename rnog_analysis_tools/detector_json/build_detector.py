@@ -3,6 +3,7 @@ import json
 import csv
 import rnog_analysis_tools.coordinate_system.coordinate_system
 import radiotools.helper
+from NuRadioReco.utilities import units
 
 """
 This script is used to build a JSON file containing an RNO-G detector descriptions to be used with NuRadioReco.
@@ -23,7 +24,7 @@ detector_description = {
     "channels": {},
     "stations": {}
 }
-
+year = 2023
 cs_disk = rnog_analysis_tools.coordinate_system.coordinate_system.CoordinateSystem()
 cs_msf = rnog_analysis_tools.coordinate_system.coordinate_system.CoordinateSystem('GPS_basestation')
 i_channel = 0
@@ -56,7 +57,10 @@ surface_position = None
 for station_id in build_instructions.keys():
     if station_id == 'general':
         continue
-    position_filename = build_instructions[station_id]['gps_results_file']
+    if year == 2022:
+        position_filename = build_instructions[station_id]['gps_results_file']
+    else:
+        position_filename = "gps_results/survey_2023_station{}.csv".format(station_id)
     position_reader = csv.reader(open(position_filename, 'r'), delimiter=',')
     power_string = None
     """
@@ -66,12 +70,19 @@ for station_id in build_instructions.keys():
         if row[0] == 'Power A':
             power_string = row
             break
-    power_string_pos_disc = np.array(cs_disk.enu_to_enu(
-        float(power_string[2]),
-        float(power_string[5]),
-        float(power_string[8]),
-        cs_msf.get_origin()
-    ))
+    if year == 2022:
+        power_string_pos_disc = np.array(cs_disk.enu_to_enu(
+            float(power_string[2]),
+            float(power_string[5]),
+            float(power_string[8]),
+            cs_msf.get_origin()
+        ))
+    else:
+        power_string_pos_disc = np.array([
+            float(power_string[2]),
+            float(power_string[5]),
+            float(power_string[8])
+        ])
     """
     Write the station information into the detector JSON
     """
@@ -92,17 +103,57 @@ for station_id in build_instructions.keys():
         Store position of the surface pulser
         """
         if row[0] == 'Surface Pulser':
-            surface_position = np.array(cs_disk.enu_to_enu(
-                float(row[2]),
-                float(row[5]),
-                float(row[8]),
-                cs_msf.get_origin()
-            )) - power_string_pos_disc
+            if year == 2022:
+                surface_position = np.array(cs_disk.enu_to_enu(
+                    float(row[2]),
+                    float(row[5]),
+                    float(row[8]),
+                    cs_msf.get_origin()
+                )) - power_string_pos_disc
+            else:
+                surface_position = np.array([
+                    float(row[2]),
+                    float(row[5]),
+                    float(row[8])
+                ]) - power_string_pos_disc
+
+
+        if "Solar" in row[0]:
+            print(row[0], i_devices)
+            if year == 2022:
+                pos = np.array(cs_disk.enu_to_enu(
+                    float(row[2]),
+                    float(row[5]),
+                    float(row[8]),
+                    cs_msf.get_origin()
+                )) - power_string_pos_disc
+            else:
+                pos = np.array([
+                    float(row[2]),
+                    float(row[5]),
+                    float(row[8])
+                ]) - power_string_pos_disc
+            if 'devices' not in detector_description.keys():
+                detector_description['devices'] = {}
+            detector_description['devices'][str(i_devices)] = {
+                "station_id": int(station_id),
+                "ant_comment": row[0],
+                "ant_position_x": pos[0],
+                "ant_position_y": pos[1],
+                "ant_position_z": 2.,
+                'pos_site': 'summit',
+                'commission_time': build_instructions[station_id]['deployment_dates']['Station'],
+                'decommission_time': "{TinyDate}:2035-11-01T00:00:00",
+                "device_id": 50 + int(row[0][-1])
+
+            }
+            i_devices += 1
         """
         The channel_associations lists which channels belong to a specific entry in the GPS data.
         """
         if row[0] in build_instructions['general']['channel_associations'].keys():
             if 'LPDA' in row[0]:
+        
                 amp_type = 'rno_surface'
                 lpda_number = int(row[0].split(' ')[1])
                 """
@@ -120,17 +171,25 @@ for station_id in build_instructions.keys():
             """
             This transforms the GPS positions to be relative to the DISC hole instead of MSF
             """
-            channel_position = np.array(cs_disk.enu_to_enu(
-                float(row[2]),
-                float(row[5]),
-                float(row[8]),
-                cs_msf.get_origin()
-            ))
+            if year == 2022:
+                channel_position = np.array(cs_disk.enu_to_enu(
+                    float(row[2]),
+                    float(row[5]),
+                    float(row[8]),
+                    cs_msf.get_origin()
+                ))
+            else:
+                channel_position = np.array([
+                    float(row[2]),
+                    float(row[5]),
+                    float(row[8])
+                ])
             relative_position = channel_position - power_string_pos_disc
             """
             Loop through all channels that are associated with the current GPS position
             """
             for channel_id in build_instructions['general']['channel_associations'][row[0]]:
+                
                 if channel_id in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 21, 22, 23]:
                     antenna_rotation_phi = 90.0
                     antenna_orientation_theta = 0.0
@@ -146,7 +205,9 @@ for station_id in build_instructions.keys():
                     """
                     if str(channel_id) in build_instructions[station_id]['fiber_overrides'].keys():
                         cable_delay = fiber_delays[str(build_instructions[station_id]['fiber_overrides'][str(channel_id)])][str(channel_id)]
-                else:
+                    if channel_id in [0, 1, 2, 3]:
+                        cable_delay += 1.768
+                else:                
                     """
                     Get the cable delay measurements. The cables for the surface antennas were taken from the same box as the
                     fibers for the power string.
@@ -165,6 +226,11 @@ for station_id in build_instructions.keys():
                     Take care of the way the LPDAs are oriented
                     """
                     antenna_rotation_phi = build_instructions[station_id]['lpda_rotations'][str(channel_id)]
+                    if 'magnetic_correction' in build_instructions[station_id]:
+                        if channel_id in build_instructions[station_id]['magnetic_correction']['plus']: 
+                            antenna_rotation_phi += 23
+                        if channel_id in build_instructions[station_id]['magnetic_correction']['minus']: 
+                            antenna_rotation_phi -= 23
                     if channel_id in [19, 16, 13]:
                         antenna_orientation_theta = 0.0
                         antenna_orientation_phi = 0.0
@@ -252,9 +318,12 @@ for station_id in build_instructions.keys():
         'Surface Cal Pulser'
     )
     i_devices += 3
-
+if year == 2022:
+    outfile_name = 'RNO_season_2022.json'
+else:
+    outfile_name = 'RNO_season_2023.json'
 json.dump(
     detector_description,
-    open('RNO_season_2022.json', 'w'),
+    open(outfile_name, 'w'),
     indent=2
 )

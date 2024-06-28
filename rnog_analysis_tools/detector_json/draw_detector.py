@@ -7,7 +7,7 @@ import radiotools.helper
 
 
 det = NuRadioReco.detector.detector.Detector(
-    json_filename='RNO_season_2022.json'
+    json_filename='RNO_season_2023.json'
 )
 det.update(astropy.time.Time.now())
 station_ids = det.get_station_ids()
@@ -62,6 +62,11 @@ for i_station, station_id in enumerate(station_ids):
                     channel_id
                 )
         global_channel_pos.append(pos + station_pos)
+    solar1 = det.get_device(station_id, 51)
+    ax1_1.scatter(solar1['ant_position_x'], solar1['ant_position_y'], c='k', marker='*')
+    solar2 = det.get_device(station_id, 52)
+    ax1_1.scatter(solar2['ant_position_x'], solar2['ant_position_y'], c='k', marker='*')
+
     surface_pulser = det.get_device(station_id, 2)
     fiber0 = det.get_device(station_id, 0)
     fiber1 = det.get_device(station_id, 1)
