@@ -461,7 +461,7 @@ def transfrom_local_to_equitorial(location, zenith,
 
 class SensitivityCalculator:
 
-    def __init__(self, min_eff_area=0.001 * units.km2, zenith_limits=np.deg2rad([55, 90]), plot=False):
+    def __init__(self, min_eff_area=0.001 * units.km2, zenith_limits=np.deg2rad([55, 90]), plot=False, energy=None):
         """
         The `zenith_limits` define the field-of-view (FOV) of the experiment. Can be set or calculated from
         the effective area (see explanation of the parameters).
@@ -482,9 +482,11 @@ class SensitivityCalculator:
         self.summit_station = EarthLocation(lat=72.5 * u.deg, lon=-38.5 * u.deg, height=2800 * u.m)
         self._f_aeff = None
 
+        self.energy = energy or 1.1e18
+
         if min_eff_area is not None or plot:
             test_zeniths = np.linspace(0, np.pi, 200)
-            f_aeff, energy = get_effective_area_function(energy=1.1e18)
+            f_aeff, energy = get_effective_area_function(energy=self.energy)
             aeffs = f_aeff(test_zeniths)
 
         if min_eff_area is not None:
@@ -619,7 +621,7 @@ class SensitivityCalculator:
         else:
             norm = len(in_fov)
 
-        f_aeff, _ = get_effective_area_function()
+        f_aeff, _ = get_effective_area_function(energy=self.energy)
         a_eff_avg = np.sum([f_aeff(theta) for theta in zeniths[in_fov]]) / norm
 
         return t_obs, a_eff_avg
