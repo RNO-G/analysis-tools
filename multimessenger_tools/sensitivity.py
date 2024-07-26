@@ -219,24 +219,37 @@ def get_effective_area(path=f"{DIRECTORY}/data/Veff_fine_20.json", energy=1.1e18
     """
     df = pd.DataFrame(json.load(open(path, "r")))
     energies = np.unique(df.energy)
-    energy = energies[np.argmin(np.abs(energies - energy))]
-    selected_df = df[df.energy == energy]
 
-    veffs = [row.veff["2.00sigma"][0] for _, row in selected_df.iterrows()]
+    idx = np.argmin(np.abs(energies - energy))
+    if energies[idx] < energy:
+        energy_low = energies[idx]
+        energy_up = energies[idx + 1]
+    else:
+        energy_low = energies[idx - 1]
+        energy_up = energies[idx]
+
+    selected_df = df[df.energy == energy_low]
+    veffs_low = np.array([row.veff["2.00sigma"][0] for _, row in selected_df.iterrows()])
+
+    selected_df = df[df.energy == energy_up]
+    veffs_up = np.array([row.veff["2.00sigma"][0] for _, row in selected_df.iterrows()])
+
+    veffs = veffs_low + (veffs_up - veffs_low) * (energy - energy_low) / (energy_up - energy_low)
 
     aeff = veffs / cross_sections.get_interaction_length(energy)
 
     if plot:
-        fig, ax = plt.subplots()
+        figx, ax = plt.subplots()
         ax.set_title(f"Energy {energy:.2e}")
         theta = (selected_df.thetamin + selected_df.thetamax) / 2
-        ax.plot(np.cos(theta), aeff / units.km ** 2)
+        ax.plot(np.cos(theta), aeff / units.m ** 2)
 
-        ax.set_ylim(0, 0.036)
+        # ax.set_ylim(0, 0.036)
         ax.grid()
         ax.set_xlabel("$cos(zenith)$")
-        ax.set_ylabel(r"$effective area / km^2$")
-        plt.show()
+        ax.set_ylabel(r"$effective \, area \, / \, m^2$")
+        figx.tight_layout()
+        figx.savefig(f"effective_area_cos_zen_{energy}.png")
 
     return selected_df.thetamin, selected_df.thetamax, aeff, energy
 
