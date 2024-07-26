@@ -8,12 +8,16 @@ import matplotlib.colors as colors
 import numpy as np
 import json
 import pandas as pd
+import os
 
 from scipy import interpolate, integrate, optimize
 from itertools import groupby
 
 from NuRadioReco.utilities import units
 from NuRadioMC.utilities import cross_sections, fluxes
+
+
+DIRECTORY = os.path.dirname(os.path.realpath(__file__))
 
 
 def calculate_fluence_limit(a_eff, dt, e_min, e_max, gamma=2, num_events=2.3, differential=False):
@@ -208,7 +212,7 @@ def is_in_fov(sky_corr, times, earth_location, fov):
     return np.squeeze(is_in_fov)
 
 
-def get_effective_area(path="data/Veff_fine_20.json", energy=1.1e18, plot=False):
+def get_effective_area(path=f"{DIRECTORY}/data/Veff_fine_20.json", energy=1.1e18, plot=False):
     """
     Parse json file to get the effective area as a funcion of the zenith angle
     of RNO-G for a specific energy.
@@ -237,7 +241,7 @@ def get_effective_area(path="data/Veff_fine_20.json", energy=1.1e18, plot=False)
     return selected_df.thetamin, selected_df.thetamax, aeff, energy
 
 
-def get_effective_area_function(path="data/Veff_fine_20.json", energy=1.1e18, norm=False):
+def get_effective_area_function(path=f"{DIRECTORY}/data/Veff_fine_20.json", energy=1.1e18, norm=False):
     """ Returns the effective area as a scipy.interpolate.interp1d function """
     thetamin, thetamax, aeff, energy = get_effective_area(path, energy)
     theta = np.array((thetamin + thetamax) / 2)
@@ -252,7 +256,7 @@ def get_effective_area_function(path="data/Veff_fine_20.json", energy=1.1e18, no
     return interpolate.interp1d(theta, aeff, bounds_error=False, fill_value=0), energy
 
 
-def get_effective_area_energy_function(path="data/Veff_fine_20.json", norm=False, plot=False):
+def get_effective_area_energy_function(path=f"{DIRECTORY}/data/Veff_fine_20.json", norm=False, plot=False):
     """ Returns a 2d interpolation function f(energy, theta) of the effective area """
     df = pd.DataFrame(json.load(open(path, "r")))
     energies = np.unique(df.energy)
