@@ -406,6 +406,67 @@ def plot_sky_corr_in_altaz(
     ax.grid()
 
 
+def plot_sky_corr_in_altaz_day(
+        ax, sky_corr, earth_location, time=None, f_aeff=None,
+        zenith_limits=None, title=None, dt=10 * u.min, clabel=r"effective area / $m^{-2}$",  #r"$effective \, area \, / \, m^{-2}$",
+        cmap="", energy=1e18, label="", sct_kwarg={}):
+    """
+    Plot the location of a source in the sky in the local corrdinate system of a experiment
+    within the corrdinate system (azimuth, zenith)
+    """
+
+    if not isinstance(dt, u.quantity.Quantity):
+        raise ValueError("Expects \"dt\" to have a astropy unit "
+                         "(i.e., be of type astropy.unit.quantity.Quantity)")
+
+
+    time_range = np.arange(0, 3600 * 24, dt / u.s) * u.s
+
+    t0 = Time("2023-02-20 00:00")
+    data = []
+    for idx, t_add in enumerate(time_range):
+        altaz = sky_corr.transform_to(AltAz(obstime=t0 + t_add, location=earth_location))
+        data.append([altaz.az / u.deg, altaz.alt / u.deg, t_add.to_value("hr")])
+    data = np.array(data)
+
+    if cmap == "":
+        cmap = "Purples"
+
+    if f_aeff is None:
+        f_aeff, _ = get_effective_area_function(energy=energy)
+
+    sct = ax.scatter(data[:, 2], 90 - data[:, 1], c=[f_aeff(z) for z in np.deg2rad(90 - data[:, 1])], marker="o", s=15,
+                     cmap=cmap, zorder=10, edgecolor="k", lw=0.1, label=label, **sct_kwarg)  # cmap=hsv
+    cbi = plt.colorbar(sct, pad=0.02, aspect=20)
+    print(np.amax([f_aeff(z) for z in np.deg2rad(90 - data[:, 1])]))
+    cbi.set_label(clabel)
+
+    ax.set_xlabel("time of day / hr")
+    ax.set_ylabel("zenith / deg")
+
+    ax.set_xticks([0, 6, 12, 18, 24])
+
+    if zenith_limits is not None:
+        l = "FOV limit"
+        for zen in zenith_limits:
+            ax.axhline(np.rad2deg(zen), ls="--", color="k", label=l)
+            l = ""
+
+        y1, y2 = ax.get_ylim()
+        ax.set_ylim(y1, y2)
+        ax.axhspan(y1, np.rad2deg(zenith_limits[0]), color="gray", lw=1, alpha=0.8)
+        ax.axhspan(np.rad2deg(zenith_limits[1]), y2, color="gray", lw=1, alpha=0.8)
+
+    if title is not None:
+        ax.set_title(title)
+
+    if time is not None:
+        altaz = sky_corr.transform_to(AltAz(obstime=time, location=earth_location))
+        ax.plot(altaz.az / u.deg, 90 - altaz.alt / u.deg, "C1*", markersize=12, zorder=10)
+
+    ax.grid()
+
+
 def plot_effective_area_1d(ax):
     pass
 
