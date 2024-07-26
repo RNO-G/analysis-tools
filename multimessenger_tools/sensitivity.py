@@ -325,7 +325,8 @@ def get_effective_area_energy_function(path=f"{DIRECTORY}/data/Veff_fine_20.json
 
 def plot_sky_corr_in_altaz(
         ax, sky_corr, earth_location, time, time_window, time_scale="hr",
-        zenith_limits=None, draw_eff_area=True, title=None, dt=10 * u.min, plot_alert=True):
+        zenith_limits=None, draw_eff_area=True, title=None, dt=10 * u.min, plot_alert=True,
+        draw_colorbar=True, clabel="", cmap="", energy=1e18):
     """
     Plot the location of a source in the sky in the local corrdinate system of a experiment
     within the corrdinate system (azimuth, zenith)
@@ -357,22 +358,26 @@ def plot_sky_corr_in_altaz(
         data.append([altaz.az / u.deg, altaz.alt / u.deg, t_add.to_value(time_scale)])
     data = np.array(data)
 
-    cmap = "twilight"
-    if draw_eff_area:
-        cmap += "_shifted"
+    if cmap == "":
+        cmap = "twilight"
+        if draw_eff_area:
+            cmap += "_shifted"
 
     sct = ax.scatter(data[:, 0], 90 - data[:, 1] , c=data[:, 2], marker="o", s=15, cmap=cmap, zorder=10, edgecolor="k", lw=0.1)  # cmap=hsv
-    cbi = plt.colorbar(sct, pad=0.02)
-    if time_scale == "s":
-        time_scale = "seconds"
-    cbi.set_label(f"{time_scale} since alert")
-    # cbi.set_label(f"{time_scale} since {time}")
+
+    if draw_colorbar:
+        cbi = plt.colorbar(sct, pad=0.02)
+        if clabel == "":
+            if time_scale == "s":
+                time_scale = "seconds"
+            clabel = f"{time_scale} since alert"
+        cbi.set_label(clabel)
 
     ax.set_xlabel("azimuth / deg")
     ax.set_ylabel("zenith / deg")
 
     if draw_eff_area:
-        theta_min, theta_max, aeff = get_effective_area()
+        theta_min, theta_max, aeff, energy = get_effective_area(energy=energy)
 
         aeff_norm = aeff / np.amax(aeff)
         ax.set_ylim(ax.get_ylim())
@@ -739,10 +744,10 @@ class SensitivityCalculator:
         ax.legend()
 
 
-    def plot_sky_corr_in_altaz(self, ax, sky_corr, time, time_range, time_scale="hr", title=""):
+    def plot_sky_corr_in_altaz(self, ax, sky_corr, time, time_range, time_scale="hr", title="", **kwargs):
 
         t_obs, a_eff_avg = self.get_observation_time_and_effective_area(sky_corr, time, time_range)
         t_obs = t_obs.to("hr")
-        title += rf"$t_{{obs}} = {t_obs:.2f}, \langle a_{{eff}} \rangle = {a_eff_avg / units.km2:.4f} km^2$"
+        title += rf"$t_{{obs}} = {t_obs:.2f}, \langle a_{{eff}} \rangle = {a_eff_avg / units.m2:.2f} m^2$"
         return plot_sky_corr_in_altaz(ax, sky_corr, self.summit_station, time, time_range, time_scale,
-                                      zenith_limits=self.zenith_limits, draw_eff_area=False, title=title)
+                                      zenith_limits=self.zenith_limits, draw_eff_area=False, title=title, **kwargs)
