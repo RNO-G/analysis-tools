@@ -44,37 +44,37 @@ def plot_blockoffset(reader):
 
     wfs = wfs[mask]
 
-    wfs_blocks = np.split(wfs, 16, axis=-1)
-    wfs_blocks = np.swapaxes(np.array(wfs_blocks), 0, 2)
-    block_medians = np.median(wfs_blocks, axis=-1).reshape(24, -1)
-    # wfs_medians = np.tile(block_medians, 128)
-    print(wfs.shape)
+    # # Manual block splitting and median calculation
+    # wfs_blocks = np.split(wfs, 16, axis=-1)
+    # wfs_blocks = np.swapaxes(np.array(wfs_blocks), 0, 2)
+    # block_medians = np.median(wfs_blocks, axis=-1).reshape(24, -1)
+
     fit_blocks = []
     for wfs_channel in np.swapaxes(wfs, 0, 1):
         fit_blocks.append(np.array([fit_block_offsets(wf, sampling_rate=2.4) for wf in wfs_channel]))
 
     fit_blocks = np.array(fit_blocks)
     fit_blocks = fit_blocks.reshape(24, -1  )
-    print(fit_blocks.shape, block_medians.shape)
-    # fit_blocks = fit_blocks.reshape(24, -1)
 
     fig, ax = plt.subplots()
-    parts = ax.violinplot(block_medians.T, np.arange(24), showextrema=True, showmedians=True,
-                          vert=False, side="high", widths=1.8)
-    parts2 = ax.violinplot(fit_blocks.T, np.arange(24), showextrema=True, showmedians=True,
-                          vert=False, side="high", widths=1.8)
+    # parts = ax.violinplot(block_medians.T, np.arange(24), showextrema=True, showmedians=True,
+                        #   vert=False, side="high", widths=1.8)
+    parts2 = ax.violinplot(
+        fit_blocks.T, np.arange(24), showextrema=True, showmedians=True,
+        vert=False, side="high", widths=1.8)
+
     ax.plot(np.nan, np.nan, label=f"{np.sum(mask)} forced triggers", color="k")
-    ax.plot(np.nan, np.nan, label="median", color="C0")
+    # ax.plot(np.nan, np.nan, label="median", color="C0")
     ax.plot(np.nan, np.nan, label="fit", color="C1")
 
     # norm = colors.Normalize(vmin=np.amin(means), vmax=np.amax(means), clip=False)
     # sm = cm.ScalarMappable(norm, cmap="Oranges")
 
-    for idx, pc in enumerate(parts['bodies']):
-        # pc.set_facecolor(sm.to_rgba(means[idx]))
-        pc.set_alpha(0.5)
+    # for idx, pc in enumerate(parts['bodies']):
+    #     # pc.set_facecolor(sm.to_rgba(means[idx]))
+    #     pc.set_alpha(0.5)
 
-    for p in [parts, parts2]:
+    for p in [parts2]:
         p["cmins"].set_linewidth(0.2)
         p["cmaxes"].set_linewidth(0.2)
         p["cbars"].set_linewidth(0.5)
@@ -350,18 +350,13 @@ def plot_triggers(reader):
     fig2.savefig(f"{fname}_trigger_vs_time.png")
 
 
-reader = readRNOGData(load_run_table=False)
+if __name__ == "__main__":
 
-t1 = dt.datetime(year=2024, month=7, day=14, hour=22, minute=20).astimezone(dt.UTC)
-t2 = dt.datetime(year=2024, month=7, day=14, hour=22, minute=30).astimezone(dt.UTC)
+    reader = readRNOGData(load_run_table=False)
+    reader.begin(
+        sys.argv[1:], convert_to_voltage=False, overwrite_sampling_rate=2.4, mattak_kwargs=dict())
 
-def time_sel(evinfo):
-    return t1.timestamp() < evinfo.triggerTime < t2.timestamp()
-
-reader.begin(sys.argv[1:], convert_to_voltage=False, overwrite_sampling_rate=2.4,
-             mattak_kwargs=dict(not_read_waveforms=False))#, selectors=time_sel, select_triggers="RADIANT0")
-
-plot_triggers(reader)
-# plot_glitching(reader)
-# plot_rms(reader)
-# plot_blockoffset(reader)
+    plot_triggers(reader)
+    # plot_glitching(reader)
+    # plot_rms(reader)
+    # plot_blockoffset(reader)
