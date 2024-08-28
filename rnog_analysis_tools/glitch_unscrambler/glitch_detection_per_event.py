@@ -1,6 +1,7 @@
 from .glitch_unscrambler import unscramble
 import numpy as np
 
+
 def diff_sq(eventdata):
     """
     Returns sum of squared differences of samples across seams of 128-sample chunks.
