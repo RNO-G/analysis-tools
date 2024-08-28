@@ -89,9 +89,15 @@ def plot_blockoffset(reader):
 
     ax.legend()
     ax.grid()
-    assert len(reader._datasets) == 1, "Reading in more than one dataset"
-    dset = reader._datasets[0]
-    fname = f"station{dset.station}_run{dset.run}"
+
+    if len(reader._datasets) == 1:
+        dset = reader._datasets[0]
+        fname = f"station{dset.station}_run{dset.run}"
+    else:
+        assert len(np.unique([dset.station for dset in reader._datasets]))
+        station = reader._datasets[0].station
+        fname = f"station{station}_run{reader._datasets[0].run}-{reader._datasets[-1].run}"
+
     fig.tight_layout()
     fig.savefig(f"{fname}_offsets.png")
 
@@ -154,9 +160,14 @@ def plot_glitching(reader):
         ax.set_xlim(max(-2000, x1), min(2000, x2))
 
     ax.grid()
-    assert len(reader._datasets) == 1, "Reading in more than one dataset"
-    dset = reader._datasets[0]
-    fname = f"station{dset.station}_run{dset.run}"
+
+    if len(reader._datasets) == 1:
+        dset = reader._datasets[0]
+        fname = f"station{dset.station}_run{dset.run}"
+    else:
+        assert len(np.unique([dset.station for dset in reader._datasets]))
+        station = reader._datasets[0].station
+        fname = f"station{station}_run{reader._datasets[0].run}-{reader._datasets[-1].run}"
 
     if apply_norm:
         fname += "_norm"
@@ -218,9 +229,14 @@ def plot_rms(reader):
     ax.set_xlabel("channels")
     ax.set_ylabel("std of waveforms / ADC")
 
-    assert len(reader._datasets) == 1, "Reading in more than one dataset"
-    dset = reader._datasets[0]
-    fname = f"station{dset.station}_run{dset.run}"
+    if len(reader._datasets) == 1:
+        dset = reader._datasets[0]
+        fname = f"station{dset.station}_run{dset.run}"
+    else:
+        assert len(np.unique([dset.station for dset in reader._datasets]))
+        station = reader._datasets[0].station
+        fname = f"station{station}_run{reader._datasets[0].run}-{reader._datasets[-1].run}"
+
     fig.tight_layout()
     fig.savefig(f"{fname}_rms_hist.png")
 
