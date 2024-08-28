@@ -38,15 +38,18 @@ def draw_sources(ax):
     TXS0506056 = SkyCoord('05h09m25s', '05d49m09s', frame='icrs')
     draw_source(ax,TXS0506056, "*b", "TXS 0506+056")
 
-    # TA_hotspot = SkyCoord(146.7 * u.deg, 43.2 * u.deg, frame='icrs') #diameter of 30-40 deg.
-    # draw_source(ax, TA_hotspot, "or", "TA Hotspot")
+    TA_hotspot = SkyCoord(146.7 * u.deg, 43.2 * u.deg, frame='icrs') #diameter of 30-40 deg.
+    draw_source(ax, TA_hotspot, "or", "TA Hotspot")
+
+    ppcs = SkyCoord("01h50m0s", 36 * u.deg, frame='icrs') #diameter of 30-40 deg.
+    draw_source(ax, ppcs, "or", "PPSC")
 
     GRB_221009A = SkyCoord(288.3 * u.deg, 19.7 * u.deg, frame='icrs')
     draw_source(ax, GRB_221009A, "*y", "GRB 221009A")
 
 
-    PKS1424_240 = SkyCoord('14h27m00s', '23d47m40s', frame='icrs')
-    draw_source(ax, PKS1424_240, "*b", "PKS 1424+240")
+    # PKS1424_240 = SkyCoord('14h27m00s', '23d47m40s', frame='icrs')
+    # draw_source(ax, PKS1424_240, "*b", "PKS 1424+240")
 
     # GB6_J1542_6129 = SkyCoord('15h42m56s', '61d29m55s', frame='icrs')
     # M87 = SkyCoord('12h30m49s', '12d23m28s', frame='icrs')
@@ -55,8 +58,8 @@ def draw_sources(ax):
     Markarian501 = SkyCoord('16h53m52s', '39d45m37s', frame='icrs')
     draw_source(ax, Markarian501, "*C1", "Mk 501")
 
-    M82 = SkyCoord('09h55m52s', '69d40m47s', frame='icrs')
-    draw_source(ax, M82, "*C1", "M82", va="top")
+    # M82 = SkyCoord('09h55m52s', '69d40m47s', frame='icrs')
+    # draw_source(ax, M82, "*C1", "M82", va="top")
 
 
 def add_instantaneous_bands(ax, time, zenith, sc, plot_kwargs):
@@ -92,7 +95,7 @@ def draw_daily_averaged_fov(ax, sc, time=Time('2024-04-20 12:00:00', scale="ut1"
 
     pcm = ax.pcolormesh(np.deg2rad(ras), np.deg2rad(decs),
                         a_eff.T / 1000 ** 2, shading="gouraud", cmap=plt.get_cmap('cmr.freeze'))
-    cbr = fig.colorbar(pcm, pad=0.02)
+    cbr = plt.colorbar(pcm, pad=0.02)
     cbr.set_label(r"daily avg. eff. area / km$^2$")
 
     ax.set_ylabel("declination / deg")
@@ -157,9 +160,10 @@ def plot_integrated_fov():
 
 
 if __name__ == "__main__":
+    # plot_integrated_fov()
     sc = sensitivity.SensitivityCalculator()
     time = Time('2024-04-20 12:00:00', scale="ut1")
-    times = time + np.linspace(0, 24, 100) * u.hour
+    times = time + np.linspace(0, 24, 250) * u.hour
 
     for t in times:
         fig, ax = plt.subplots(figsize=(5, 3), subplot_kw=dict(projection='mollweide'))
