@@ -33,17 +33,9 @@ def convert_events_information(event_info):
     return data
 
 
-def plot_blockoffset(reader):
-
-    event_info = reader.get_events_information(keys=["triggerType", "triggerTime", "readoutTime", "hasWaveforms"])
-    event_info = convert_events_information(event_info)
-    for key, value in event_info.items():
-        event_info[key] = value[event_info["hasWaveforms"]]
+def plot_blockoffset(event_info, wfs):
 
     mask = event_info["triggerType"] == "FORCE"
-
-    wfs = reader.get_waveforms(max_events=None, overwrite_skip_incomplete=True)
-
     wfs = wfs[mask]
 
     # # Manual block splitting and median calculation
@@ -104,8 +96,7 @@ def plot_blockoffset(reader):
     fig.savefig(f"{fname}_offsets.png")
 
 
-def plot_glitching(reader):
-    wfs = reader.get_waveforms(max_events=None, overwrite_skip_incomplete=True)
+def plot_glitching(event_info, wfs):
 
     apply_norm = True
 
@@ -178,16 +169,8 @@ def plot_glitching(reader):
     fig.savefig(f"{fname}_glitching.png")
 
 
-def plot_rms(reader):
+def plot_rms(event_info, wfs):
 
-    event_info = reader.get_events_information(keys=["triggerType", "triggerTime", "readoutTime", "hasWaveforms"])
-    event_info = convert_events_information(event_info)
-
-    for key, value in event_info.items():
-        event_info[key] = value[event_info["hasWaveforms"]]
-
-    wfs = reader.get_waveforms(max_events=None, overwrite_skip_incomplete=True)
-    print(f"Found {len(wfs)} waveforms")
     times = np.array([dt.datetime.fromtimestamp(ts) for ts in event_info["readoutTime"]])
     # t_mask = times > dt.datetime.fromisoformat('2024-06-26T23:00:00')
     # wfs = wfs[t_mask]
@@ -312,9 +295,12 @@ def plot_triggers(reader):
     run_duration_readout = np.amax(data["readoutTime"]) - np.amin(data["readoutTime"])
     bin_width = 300 #  secs
     nbins = int(run_duration // bin_width)
+    if nbins > 1000:
+        bin_width = 3600 #  secs
+        nbins = int(run_duration // bin_width)
 
-    print(f"Run duration {run_duration:.2f} s")
-    print(f"Run duration (readout) {run_duration_readout:.2f} s")
+    print(f"Run duration {run_duration / 3600:.2f} h")
+    print(f"Run duration (readout) {run_duration_readout / 3600:.2f} h")
     triggers = np.unique(data["triggerType"])
 
     times = np.array([dt.datetime.fromtimestamp(ts).astimezone(dt.UTC) for ts in data["triggerTime"]])
@@ -378,6 +364,15 @@ if __name__ == "__main__":
         sys.argv[1:], convert_to_voltage=False, overwrite_sampling_rate=2.4, mattak_kwargs=dict(skip_incomplete=False))
 
     plot_triggers(reader)
-    plot_glitching(reader)
-    plot_rms(reader)
-    plot_blockoffset(reader)
+
+    event_info = reader.get_events_information(keys=["triggerType", "triggerTime", "readoutTime", "hasWaveforms"])
+    event_info = convert_events_information(event_info)
+    for key, value in event_info.items():
+        event_info[key] = value[event_info["hasWaveforms"]]
+
+    wfs = reader.get_waveforms(max_events=None, overwrite_skip_incomplete=True)
+    print(f"Found {len(wfs)} waveforms")
+
+    plot_glitching(event_info, wfs)
+    plot_rms(event_info, wfs)
+    plot_blockoffset(event_info, wfs)
