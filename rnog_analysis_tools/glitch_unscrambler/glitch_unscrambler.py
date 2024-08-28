@@ -1,3 +1,5 @@
+import numpy as np
+
 def unscramble(trace):
     """ script to fix scrambled traces (Note: first and last 64 samples are unusable and hence masked with zeros) """
     new_trace = np.zeros_like(trace)

@@ -1,4 +1,5 @@
-from glitch_unscrambler import unscramble
+from .glitch_unscrambler import unscramble
+import numpy as np
 
 def diff_sq(eventdata):
     """
