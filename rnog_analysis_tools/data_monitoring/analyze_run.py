@@ -33,10 +33,10 @@ def convert_events_information(event_info):
     return data
 
 
-def plot_blockoffset(event_info, wfs):
+def plot_blockoffset(reader, event_info, wfs):
 
     mask = event_info["triggerType"] == "FORCE"
-    wfs = wfs[mask]
+    wfs = np.copy(wfs)[mask]
 
     # # Manual block splitting and median calculation
     # wfs_blocks = np.split(wfs, 16, axis=-1)
@@ -96,7 +96,7 @@ def plot_blockoffset(event_info, wfs):
     fig.savefig(f"{fname}_offsets.png")
 
 
-def plot_glitching(event_info, wfs):
+def plot_glitching(reader, event_info, wfs):
 
     apply_norm = True
 
@@ -169,7 +169,7 @@ def plot_glitching(event_info, wfs):
     fig.savefig(f"{fname}_glitching.png")
 
 
-def plot_rms(event_info, wfs):
+def plot_rms(reader, event_info, wfs):
 
     times = np.array([dt.datetime.fromtimestamp(ts) for ts in event_info["readoutTime"]])
     # t_mask = times > dt.datetime.fromisoformat('2024-06-26T23:00:00')
@@ -271,14 +271,9 @@ def plot_rms(event_info, wfs):
     plt.savefig(f"{fname}_rms_vs_time.png")
 
 
-def plot_triggers(reader):
-
-    event_info = reader.get_events_information(keys=["triggerType", "triggerTime", "readoutTime",
-                                                     "radiantThrs", "lowTrigThrs"])
-    data = convert_events_information(event_info)
+def plot_triggers(reader, data):
 
     dset = reader._datasets[0]
-
     if dset.station != 14:
         downwardfacing_radiantThrs = np.mean(data["radiantThrs"][:, [12, 14, 15, 17, 18, 20]], axis=1)
         upwardfacing_radiantThrs = np.mean(data["radiantThrs"][:, [13, 16, 19]], axis=1)
@@ -363,16 +358,18 @@ if __name__ == "__main__":
     reader.begin(
         sys.argv[1:], convert_to_voltage=False, overwrite_sampling_rate=2.4, mattak_kwargs=dict(skip_incomplete=False))
 
-    plot_triggers(reader)
-
-    event_info = reader.get_events_information(keys=["triggerType", "triggerTime", "readoutTime", "hasWaveforms"])
+    event_info = reader.get_events_information(
+        keys=["triggerType", "triggerTime", "readoutTime", "radiantThrs", "lowTrigThrs", "hasWaveforms"])
     event_info = convert_events_information(event_info)
+
+    plot_triggers(reader, event_info)
+
     for key, value in event_info.items():
         event_info[key] = value[event_info["hasWaveforms"]]
 
     wfs = reader.get_waveforms(max_events=None, overwrite_skip_incomplete=True)
     print(f"Found {len(wfs)} waveforms")
 
-    plot_glitching(event_info, wfs)
-    plot_rms(event_info, wfs)
-    plot_blockoffset(event_info, wfs)
+    plot_glitching(reader, event_info, wfs)
+    plot_rms(reader, event_info, wfs)
+    plot_blockoffset(reader, event_info, wfs)
