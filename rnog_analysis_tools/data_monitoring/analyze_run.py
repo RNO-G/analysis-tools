@@ -33,22 +33,18 @@ Pass a run directory with rootified files as argument to the script.
 #     return data
 
 
-def plot_blockoffset(event_info, wfs, runs, station):
+def plot_blockoffset(event_info, runs, station):
 
     mask = event_info["triggerType"] == "FORCE"
-    wfs = np.copy(wfs)[mask]
 
     # # Manual block splitting and median calculation
     # wfs_blocks = np.split(wfs, 16, axis=-1)
     # wfs_blocks = np.swapaxes(np.array(wfs_blocks), 0, 2)
     # block_medians = np.median(wfs_blocks, axis=-1).reshape(24, -1)
 
-    fit_blocks = []
-    for wfs_channel in np.swapaxes(wfs, 0, 1):
-        fit_blocks.append(np.array([fit_block_offsets(wf, sampling_rate=2.4) for wf in wfs_channel]))
-
-    fit_blocks = np.array(fit_blocks)
-    fit_blocks = fit_blocks.reshape(24, -1  )
+    fit_blocks = event_info["block_offsets"]
+    fit_blocks = np.swapaxes(fit_blocks, 0, 1)
+    fit_blocks = fit_blocks.reshape(24, -1)
 
     fig, ax = plt.subplots()
     # parts = ax.violinplot(block_medians.T, np.arange(24), showextrema=True, showmedians=True,
@@ -98,8 +94,8 @@ def plot_glitching(event_info, wfs, runs, station):
 
     apply_norm = True
 
-    ts = np.array([glitch_detection_per_event.is_channel_scrambled(wf) for wf in wfs.reshape(-1, 2048)]).reshape(wfs.shape[:2])
-    std = np.std(wfs, axis=-1)
+    ts = event_info["glitching_test_statistics"]
+    std = event_info["waveform_std"]
 
     if apply_norm:
         ts /= std
@@ -164,7 +160,7 @@ def plot_glitching(event_info, wfs, runs, station):
     fig.savefig(f"{fname}_glitching.png")
 
 
-def plot_rms(event_info, wfs, runs, station):
+def plot_rms(event_info, runs, station):
 
     times = np.array([dt.datetime.fromtimestamp(ts) for ts in event_info["readoutTime"]])
     # t_mask = times > dt.datetime.fromisoformat('2024-06-26T23:00:00')
@@ -173,7 +169,7 @@ def plot_rms(event_info, wfs, runs, station):
 
     fig, ax = plt.subplots(figsize=(9, 5))
 
-    std = np.std(wfs, axis=-1)
+    std = event_info["waveform_std"]
 
     # ax.errorbar(np.arange(24), np.mean(std, axis=0), np.std(std, axis=0), ls="", marker="o", color="k", label="all")
 
@@ -242,7 +238,7 @@ def plot_rms(event_info, wfs, runs, station):
 
     for idx, trigger in enumerate(np.unique(event_info["triggerType"])):
         axs[0].plot(np.nan, np.nan, f"C{idx}.", label=trigger)
-    
+
     axs[0].legend(ncols=5)
 
 
@@ -295,41 +291,46 @@ if __name__ == "__main__":
         sys.exit(1)
 
     dataset_paths = sys.argv[1:]
-    from rnog_analysis_tools.data_monitoring.datasets import Datasets, convert_events_information
-    datasets = Datasets(dataset_paths)
+    if len(dataset_paths) == 1 and dataset_paths[0].endswith(".npz"):
+        data = np.load(dataset_paths[0])
+        event_info = {k: data[k] for k in data}
+        station = np.unique(event_info["station"])[0]
+        runs = np.unique(event_info["run"])
+    else:
+        from rnog_analysis_tools.data_monitoring.datasets import Datasets, convert_events_information
+        datasets = Datasets(dataset_paths)
 
-    event_info, wfs = datasets.events()
-    event_info = convert_events_information(event_info)
+        event_info, wfs = datasets.events()
+        event_info = convert_events_information(event_info)
 
-    inf_mask = np.isinf(event_info["triggerTime"])
-    event_info["triggerTime"][inf_mask] = event_info["readoutTime"][inf_mask]
-    print(f"Found {np.sum(inf_mask)} events with inf trigger time (of {len(inf_mask)} events)")
+        inf_mask = np.isinf(event_info["triggerTime"])
+        event_info["triggerTime"][inf_mask] = event_info["readoutTime"][inf_mask]
+        print(f"Found {np.sum(inf_mask)} events with inf trigger time (of {len(inf_mask)} events)")
 
-    for key, value in event_info.items():
-        event_info[key] = value[event_info["hasWaveforms"]]
+        for key, value in event_info.items():
+            event_info[key] = value[event_info["hasWaveforms"]]
 
 
-    std = np.std(wfs, axis=-1)
-    event_info["waveform_std"] = std
-    ts = np.array([glitch_detection_per_event.is_channel_scrambled(wf) for wf in wfs.reshape(-1, 2048)]).reshape(wfs.shape[:2])
-    event_info["glitching_test_statistics"] = ts
+        std = np.std(wfs, axis=-1)
+        event_info["waveform_std"] = std
+        ts = np.array([glitch_detection_per_event.is_channel_scrambled(wf) for wf in wfs.reshape(-1, 2048)]).reshape(wfs.shape[:2])
+        event_info["glitching_test_statistics"] = ts
 
-    fit_blocks = []
-    for wfs_channel in np.swapaxes(wfs, 0, 1):
-        fit_blocks.append(np.array([fit_block_offsets(wf, sampling_rate=2.4) for wf in wfs_channel]))
+        fit_blocks = []
+        for wfs_channel in np.swapaxes(wfs, 0, 1):
+            fit_blocks.append(np.array([fit_block_offsets(wf, sampling_rate=2.4) for wf in wfs_channel]))
+        fit_blocks = np.array(fit_blocks)
 
-    fit_blocks = np.array(fit_blocks)
-    print(fit_blocks.shape)
-    # n_channel, n_events, n_blocks -> n_events, n_channels, n_blocks
-    fit_blocks = np.swapaxes(fit_blocks, 0, 1)
-    event_info["block_offsets"] = fit_blocks
-    
-    station = np.unique(event_info["station"])[0]
-    runs = np.unique(event_info["run"])
-    fname = f"event_info_station{station}_runs_{runs[0]}-{runs[-1]}_{len(runs)}.npz"
+        # n_channel, n_events, n_blocks -> n_events, n_channels, n_blocks
+        fit_blocks = np.swapaxes(fit_blocks, 0, 1)
+        event_info["block_offsets"] = fit_blocks
 
-    np.savez(fname, **event_info)
+        station = np.unique(event_info["station"])[0]
+        runs = np.unique(event_info["run"])
+        fname = f"event_info_station{station}_runs_{runs[0]}-{runs[-1]}_{len(runs)}.npz"
 
-    plot_glitching(event_info, wfs, datasets.runs, datasets.station)
-    plot_rms(event_info, wfs, datasets.runs, datasets.station)
-    plot_blockoffset(event_info, wfs, datasets.runs, datasets.station)
+        np.savez(fname, **event_info)
+
+    plot_glitching(event_info, runs, station)
+    plot_rms(event_info, runs, station)
+    plot_blockoffset(event_info, runs, station)
