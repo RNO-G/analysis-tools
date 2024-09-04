@@ -71,7 +71,7 @@ class Datasets(object):
                 if self.duration is None:
                     duration += dataset.duration()
 
-            self.duration
+            self.duration = duration
             return np.hstack(event_info)
 
     def events(self, **kwargs):
@@ -82,12 +82,11 @@ class Datasets(object):
             wfs = []
             for path in self.dataset_paths:
                 dataset = self.open_dataset(path)
-                if dataset is not None:
+                if dataset is None:
                     continue
                 event_info.append(dataset.eventInfo())
                 wfs.append(dataset.wfs(**kwargs))
-
-            return np.hstack(event_info), np.hstack(wfs)
+            return np.hstack(event_info), np.vstack(wfs)
 
     def iterate(self, **kwargs):
         for dataset in self.datasets.values():

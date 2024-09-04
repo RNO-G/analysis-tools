@@ -8,7 +8,7 @@ import sys
 import datetime as dt
 
 
-def plot_triggers(data, runs, station):
+def plot_triggers(data, runs, station, duration=None):
 
     if station != 14:
         downwardfacing_radiantThrs = np.mean(data["radiantThrs"][:, [12, 14, 15, 17, 18, 20]], axis=1)
@@ -18,9 +18,10 @@ def plot_triggers(data, runs, station):
         upwardfacing_radiantThrs = np.mean(data["radiantThrs"][:, [13, 15, 17, 19]], axis=1)
 
     fig, ax = plt.subplots()
-    fig2, ax2 = plt.subplots()
+    fig2, ax2 = plt.subplots(figsize=(16, 5))
 
-    run_duration = np.amax(data["triggerTime"]) - np.amin(data["triggerTime"])
+    
+    run_duration = duration or np.amax(data["triggerTime"]) - np.amin(data["triggerTime"])
     run_duration_readout = np.amax(data["readoutTime"]) - np.amin(data["readoutTime"])
 
     bin_width = 300 #  secs
@@ -94,9 +95,16 @@ if __name__ == "__main__":
 
     dataset_paths = sys.argv[1:]
 
-    datasets = Datasets(dataset_paths)
+    datasets = Datasets(dataset_paths, skip_incomplete=False)
 
     data = datasets.eventInfo()
     data = convert_events_information(data)
+    
+    inf_mask = np.isinf(data["triggerTime"])
+    data["triggerTime"][inf_mask] = data["readoutTime"][inf_mask]
+    print(f"Found {np.sum(inf_mask)} events with inf trigger time (of {len(inf_mask)} events)")
 
-    plot_triggers(data, datasets.runs, datasets.station)
+
+    plot_triggers(data, datasets.runs, datasets.station, datasets.duration)
+
+

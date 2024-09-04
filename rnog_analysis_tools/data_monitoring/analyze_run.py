@@ -148,7 +148,7 @@ def plot_glitching(event_info, wfs, runs, station):
         ax.set_xlim(max(-50000, x1), min(50000, x2))
     else:
         x1, x2 = ax.get_xlim()
-        ax.set_xlim(max(-2000, x1), min(2000, x2))
+        #ax.set_xlim(max(-2000, x1), min(2000, x2))
 
     ax.grid()
 
@@ -216,7 +216,7 @@ def plot_rms(event_info, wfs, runs, station):
         fname = f"station{station}_run{runs[0]}"
     else:
         fname = f"station{station}_run{runs[0]}-{runs[-1]}"
-
+    ax.set_yscale("log")
     fig.tight_layout()
     fig.savefig(f"{fname}_rms_hist.png")
 
@@ -238,9 +238,11 @@ def plot_rms(event_info, wfs, runs, station):
             ax.plot(times[mask], std[mask][:, channel_groups[cg]], f"C{idx}.", markersize=1)
         ax.plot(np.nan, np.nan, "k.", label=cg)
         ax.legend()
+        ax.set_yscale("log")
 
     for idx, trigger in enumerate(np.unique(event_info["triggerType"])):
         axs[0].plot(np.nan, np.nan, f"C{idx}.", label=trigger)
+    
     axs[0].legend(ncols=5)
 
 
@@ -305,6 +307,28 @@ if __name__ == "__main__":
 
     for key, value in event_info.items():
         event_info[key] = value[event_info["hasWaveforms"]]
+
+
+    std = np.std(wfs, axis=-1)
+    event_info["waveform_std"] = std
+    ts = np.array([glitch_detection_per_event.is_channel_scrambled(wf) for wf in wfs.reshape(-1, 2048)]).reshape(wfs.shape[:2])
+    event_info["glitching_test_statistics"] = ts
+
+    fit_blocks = []
+    for wfs_channel in np.swapaxes(wfs, 0, 1):
+        fit_blocks.append(np.array([fit_block_offsets(wf, sampling_rate=2.4) for wf in wfs_channel]))
+
+    fit_blocks = np.array(fit_blocks)
+    print(fit_blocks.shape)
+    # n_channel, n_events, n_blocks -> n_events, n_channels, n_blocks
+    fit_blocks = np.swapaxes(fit_blocks, 0, 1)
+    event_info["block_offsets"] = fit_blocks
+    
+    station = np.unique(event_info["station"])[0]
+    runs = np.unique(event_info["run"])
+    fname = f"event_info_station{station}_runs_{runs[0]}-{runs[-1]}_{len(runs)}.npz"
+
+    np.savez(fname, **event_info)
 
     plot_glitching(event_info, wfs, datasets.runs, datasets.station)
     plot_rms(event_info, wfs, datasets.runs, datasets.station)
