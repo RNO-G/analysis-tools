@@ -13,6 +13,8 @@ class Datasets(object):
         self.num_events = 0
         self.read_in_init = read_in_init
 
+        self.duration = None
+
         if read_in_init:
             for path in dataset_paths:
                 dataset = self.open_dataset(path)
@@ -54,6 +56,8 @@ class Datasets(object):
             return np.hstack(wfs)
 
     def eventInfo(self):
+
+        duration = 0
         if self.read_in_init:
             return np.hstack([dataset.eventInfo() for dataset in self.datasets.values()])
         else:
@@ -62,9 +66,28 @@ class Datasets(object):
                 dataset = self.open_dataset(path)
                 if dataset is not None:
                     continue
-                event_info.append(dataset.eventInfo())
 
+                event_info.append(dataset.eventInfo())
+                if self.duration is None:
+                    duration += dataset.duration()
+
+            self.duration
             return np.hstack(event_info)
+
+    def events(self, **kwargs):
+        if self.read_in_init:
+            return np.hstack([dataset.eventInfo() for dataset in self.datasets.values()]), np.hstack([dataset.wfs(**kwargs) for dataset in self.datasets.values()])
+        else:
+            event_info = []
+            wfs = []
+            for path in self.dataset_paths:
+                dataset = self.open_dataset(path)
+                if dataset is not None:
+                    continue
+                event_info.append(dataset.eventInfo())
+                wfs.append(dataset.wfs(**kwargs))
+
+            return np.hstack(event_info), np.hstack(wfs)
 
     def iterate(self, **kwargs):
         for dataset in self.datasets.values():
