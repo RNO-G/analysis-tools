@@ -19,21 +19,21 @@ Pass a run directory with rootified files as argument to the script.
 """
 
 
-def convert_events_information(event_info):
+# def convert_events_information(event_info):
 
-    data = defaultdict(list)
+#     data = defaultdict(list)
 
-    for ele in event_info.values():
-        for k, v in ele.items():
-            data[k].append(v)
+#     for ele in event_info.values():
+#         for k, v in ele.items():
+#             data[k].append(v)
 
-    for k in data:
-        data[k] = np.array(data[k])
+#     for k in data:
+#         data[k] = np.array(data[k])
 
-    return data
+#     return data
 
 
-def plot_blockoffset(reader, event_info, wfs):
+def plot_blockoffset(event_info, wfs, runs, station):
 
     mask = event_info["triggerType"] == "FORCE"
     wfs = np.copy(wfs)[mask]
@@ -84,19 +84,17 @@ def plot_blockoffset(reader, event_info, wfs):
     ax.legend()
     ax.grid()
 
-    if len(reader._datasets) == 1:
-        dset = reader._datasets[0]
-        fname = f"station{dset.station}_run{dset.run}"
+
+    if len(runs) == 1:
+        fname = f"station{station}_run{runs[0]}"
     else:
-        assert len(np.unique([dset.station for dset in reader._datasets]))
-        station = reader._datasets[0].station
-        fname = f"station{station}_run{reader._datasets[0].run}-{reader._datasets[-1].run}"
+        fname = f"station{station}_run{runs[0]}-{runs[-1]}"
 
     fig.tight_layout()
     fig.savefig(f"{fname}_offsets.png")
 
 
-def plot_glitching(reader, event_info, wfs):
+def plot_glitching(event_info, wfs, runs, station):
 
     apply_norm = True
 
@@ -154,13 +152,10 @@ def plot_glitching(reader, event_info, wfs):
 
     ax.grid()
 
-    if len(reader._datasets) == 1:
-        dset = reader._datasets[0]
-        fname = f"station{dset.station}_run{dset.run}"
+    if len(runs) == 1:
+        fname = f"station{station}_run{runs[0]}"
     else:
-        assert len(np.unique([dset.station for dset in reader._datasets]))
-        station = reader._datasets[0].station
-        fname = f"station{station}_run{reader._datasets[0].run}-{reader._datasets[-1].run}"
+        fname = f"station{station}_run{runs[0]}-{runs[-1]}"
 
     if apply_norm:
         fname += "_norm"
@@ -169,7 +164,7 @@ def plot_glitching(reader, event_info, wfs):
     fig.savefig(f"{fname}_glitching.png")
 
 
-def plot_rms(reader, event_info, wfs):
+def plot_rms(event_info, wfs, runs, station):
 
     times = np.array([dt.datetime.fromtimestamp(ts) for ts in event_info["readoutTime"]])
     # t_mask = times > dt.datetime.fromisoformat('2024-06-26T23:00:00')
@@ -217,13 +212,10 @@ def plot_rms(reader, event_info, wfs):
     ax.set_xlabel("channels")
     ax.set_ylabel("std of waveforms / ADC")
 
-    if len(reader._datasets) == 1:
-        dset = reader._datasets[0]
-        fname = f"station{dset.station}_run{dset.run}"
+    if len(runs) == 1:
+        fname = f"station{station}_run{runs[0]}"
     else:
-        assert len(np.unique([dset.station for dset in reader._datasets]))
-        station = reader._datasets[0].station
-        fname = f"station{station}_run{reader._datasets[0].run}-{reader._datasets[-1].run}"
+        fname = f"station{station}_run{runs[0]}-{runs[-1]}"
 
     fig.tight_layout()
     fig.savefig(f"{fname}_rms_hist.png")
@@ -271,105 +263,49 @@ def plot_rms(reader, event_info, wfs):
     plt.savefig(f"{fname}_rms_vs_time.png")
 
 
-def plot_triggers(reader, data):
-
-    dset = reader._datasets[0]
-    if dset.station != 14:
-        downwardfacing_radiantThrs = np.mean(data["radiantThrs"][:, [12, 14, 15, 17, 18, 20]], axis=1)
-        upwardfacing_radiantThrs = np.mean(data["radiantThrs"][:, [13, 16, 19]], axis=1)
-    else:
-        downwardfacing_radiantThrs = np.mean(data["radiantThrs"][:, [12, 14, 16, 18]], axis=1)
-        upwardfacing_radiantThrs = np.mean(data["radiantThrs"][:, [13, 15, 17, 19]], axis=1)
-
-    lowTrigThrs = np.mean(data["lowTrigThrs"], axis=1)
-
-    fig, ax = plt.subplots()
-    fig2, ax2 = plt.subplots()
-
-    run_duration = np.amax(data["triggerTime"]) - np.amin(data["triggerTime"])
-    run_duration_readout = np.amax(data["readoutTime"]) - np.amin(data["readoutTime"])
-    bin_width = 300 #  secs
-    nbins = int(run_duration // bin_width)
-    if nbins > 1000:
-        bin_width = 3600 #  secs
-        nbins = int(run_duration // bin_width)
-
-    print(f"Run duration {run_duration / 3600:.2f} h")
-    print(f"Run duration (readout) {run_duration_readout / 3600:.2f} h")
-    triggers = np.unique(data["triggerType"])
-
-    times = np.array([dt.datetime.fromtimestamp(ts).astimezone(dt.UTC) for ts in data["triggerTime"]])
-    # times_num = md.date2num(times)
-
-    n, bins, _ = ax2.hist(times, nbins, weights=np.full(len(times), 1 / bin_width),
-                    histtype="step", color="k", label="total")
-
-    for idx, trigger in enumerate(triggers):
-        mask = data["triggerType"] == trigger
-
-        rate = np.sum(mask) / run_duration_readout
-
-        ax.bar(idx, np.sum(mask), label=f"{trigger}: {rate:.3f}")
-
-        ax2.hist(times[mask], bins, histtype="step", label=trigger, weights=np.full(np.sum(mask), 1 / bin_width))
-
-
-    if 0:
-        ax3 = ax2.twinx()
-        ax3.plot(times, upwardfacing_radiantThrs / 16777215 * 2.5, "C2--", lw=1, label="RADIANT0 (up)")
-        ax3.plot(times, downwardfacing_radiantThrs / 16777215 * 2.5, "C3--", lw=1, label="RADIANT1 (down)")
-
-        ax3.set_ylabel("thresholds")
-        # ax3.plot(times, lowTrigThrs / 30, "C1--", lw=1, label="LT / 30")
-        # ax3.set_ylim(None, 1.2)
-        ax3.legend(loc="upper left", title="Trigger thresholds")
-
-    ax.set_xticks(np.arange(len(triggers)))
-    ax.set_xticklabels(triggers, rotation=20)
-
-    ax.legend(title=f"Trigger rates. Total: {len(data['triggerType']) / run_duration_readout:.3f}")
-
-    ax2.set_ylabel("rate / s")
-    xfmt = md.DateFormatter('%m-%d %H:%M')
-    ax2.xaxis.set_major_formatter(xfmt)
-    ax2.xaxis.set_tick_params(rotation=20)
-    ax2.set_yscale("log")
-    ax2.legend()
-
-    if len(reader._datasets) == 1:
-        dset = reader._datasets[0]
-        fname = f"station{dset.station}_run{dset.run}"
-    else:
-        assert len(np.unique([dset.station for dset in reader._datasets]))
-        station = reader._datasets[0].station
-        fname = f"station{station}_run{reader._datasets[0].run}-{reader._datasets[-1].run}"
-
-
-    fig.tight_layout()
-    fig.savefig(f"{fname}_trigger_hist.png")
-
-    fig2.tight_layout()
-    fig2.savefig(f"{fname}_trigger_vs_time.png")
-
-
 if __name__ == "__main__":
 
-    reader = readRNOGData(load_run_table=False)
-    reader.begin(
-        sys.argv[1:], convert_to_voltage=False, overwrite_sampling_rate=2.4, mattak_kwargs=dict(skip_incomplete=False))
+    # n_files = len(sys.argv[1:])
+    # n_batches = n_files // 100 + 1
 
-    event_info = reader.get_events_information(
-        keys=["triggerType", "triggerTime", "readoutTime", "radiantThrs", "lowTrigThrs", "hasWaveforms"])
+    # wfs = []
+    # event_info = []
+
+    # for batch in np.split(sys.argv[1:], n_batches):
+    #     reader = readRNOGData(load_run_table=False)
+    #     reader.begin(
+    #         batch, convert_to_voltage=False, overwrite_sampling_rate=2.4, check_trigger_time=False, mattak_kwargs=dict(skip_incomplete=False))
+
+    #     event_info_tmp = reader.get_events_information(
+    #         keys=["triggerType", "triggerTime", "readoutTime", "radiantThrs", "lowTrigThrs", "hasWaveforms"])
+
+    #     wfs_tmp = reader.get_waveforms(max_events=None, override_skip_incomplete=True)
+    #     print(f"Found {len(wfs_tmp)} waveforms")
+
+    #     wfs += list(wfs_tmp)
+    #     event_info += list(event_info_tmp)
+
+    # event_info = convert_events_information(event_info)
+    # wfs = np.hstack(wfs)
+
+    if len(sys.argv) < 2:
+        print("Usage: python analyse_triggers.py <dataset_paths>")
+        sys.exit(1)
+
+    dataset_paths = sys.argv[1:]
+    from rnog_analysis_tools.data_monitoring.datasets import Datasets, convert_events_information
+    datasets = Datasets(dataset_paths)
+
+    event_info, wfs = datasets.events()
     event_info = convert_events_information(event_info)
 
-    plot_triggers(reader, event_info)
+    inf_mask = np.isinf(event_info["triggerTime"])
+    event_info["triggerTime"][inf_mask] = event_info["readoutTime"][inf_mask]
+    print(f"Found {np.sum(inf_mask)} events with inf trigger time (of {len(inf_mask)} events)")
 
     for key, value in event_info.items():
         event_info[key] = value[event_info["hasWaveforms"]]
 
-    wfs = reader.get_waveforms(max_events=None, overwrite_skip_incomplete=True)
-    print(f"Found {len(wfs)} waveforms")
-
-    plot_glitching(reader, event_info, wfs)
-    plot_rms(reader, event_info, wfs)
-    plot_blockoffset(reader, event_info, wfs)
+    plot_glitching(event_info, wfs, datasets.runs, datasets.station)
+    plot_rms(event_info, wfs, datasets.runs, datasets.station)
+    plot_blockoffset(event_info, wfs, datasets.runs, datasets.station)
