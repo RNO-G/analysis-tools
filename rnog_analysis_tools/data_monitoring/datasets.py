@@ -1,7 +1,7 @@
 import mattak.Dataset as Dataset
 
 import numpy as np
-
+from collections import defaultdict
 
 class Datasets(object):
     def __init__(self, dataset_paths, **kwargs):
@@ -35,3 +35,17 @@ class Datasets(object):
             dataset.setEntries(0, dataset.N())
             for ev, wfs in dataset.iterate(**kwargs):
                 yield ev, wfs
+
+
+def convert_events_information(event_info):
+
+    data = defaultdict(list)
+
+    for ele in event_info.values():
+        for k, v in ele.items():
+            data[k].append(v)
+
+    for k in data:
+        data[k] = np.array(data[k])
+
+    return data

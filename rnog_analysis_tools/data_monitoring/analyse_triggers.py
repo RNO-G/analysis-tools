@@ -1,4 +1,4 @@
-from rnog_analysis_tools.data_monitoring.datasets import Datasets
+from rnog_analysis_tools.data_monitoring.datasets import Datasets, convert_events_information
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -94,8 +94,9 @@ if __name__ == "__main__":
 
     dataset_paths = sys.argv[1:]
 
-    datasets = Datasets(dataset_paths, load_event_info=False)
+    datasets = Datasets(dataset_paths)
 
     data = datasets.eventInfo()
+    data = convert_events_information(data)
 
     plot_triggers(data, datasets.runs, datasets.station)
