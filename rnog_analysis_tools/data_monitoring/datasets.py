@@ -22,15 +22,20 @@ class Datasets(object):
 
 
     def open_dataset(self, path):
-        dataset = Dataset.Dataset(station=0, run=0, data_path=path, **self._kwargs)
-        self.runs.append(dataset.run)
-        if self.station is None:
-            self.station = dataset.station
-        else:
-            # this could be changed in the future if there is a usecase for it
-            assert self.station == dataset.station, "All datasets must be from the same station"
+        try:
+            dataset = Dataset.Dataset(station=0, run=0, data_path=path, **self._kwargs)
+            self.runs.append(dataset.run)
+            if self.station is None:
+                self.station = dataset.station
+            else:
+                # this could be changed in the future if there is a usecase for it
+                assert self.station == dataset.station, "All datasets must be from the same station"
 
-        return dataset
+            return dataset
+        except Exception as e:
+            print(f"Failed to open dataset {path}")
+            print(e)
+            return None
 
     def N(self):
         return self.num_events
@@ -42,6 +47,8 @@ class Datasets(object):
             wfs = []
             for path in self.dataset_paths:
                 dataset = self.open_dataset(path)
+                if dataset is not None:
+                    continue
                 wfs.append(dataset.wfs(**kwargs))
 
             return np.hstack(wfs)
@@ -53,6 +60,8 @@ class Datasets(object):
             event_info = []
             for path in self.dataset_paths:
                 dataset = self.open_dataset(path)
+                if dataset is not None:
+                    continue
                 event_info.append(dataset.eventInfo())
 
             return np.hstack(event_info)
