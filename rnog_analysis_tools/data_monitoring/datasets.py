@@ -18,7 +18,6 @@ class Datasets(object):
         if read_in_init:
             for path in dataset_paths:
                 dataset = self.open_dataset(path)
-                dataset.setEntries((0, dataset.N()))
                 self.datasets[(self.num_events, self.num_events + dataset.N())] = dataset
                 self.num_events += dataset.N()
 
@@ -26,6 +25,7 @@ class Datasets(object):
     def open_dataset(self, path):
         try:
             dataset = Dataset.Dataset(station=0, run=0, data_path=path, **self._kwargs)
+            dataset.setEntries((0, dataset.N()))
             self.runs.append(dataset.run)
             if self.station is None:
                 self.station = dataset.station
@@ -49,7 +49,7 @@ class Datasets(object):
             wfs = []
             for path in self.dataset_paths:
                 dataset = self.open_dataset(path)
-                if dataset is not None:
+                if dataset is None:
                     continue
                 wfs.append(dataset.wfs(**kwargs))
 
@@ -64,7 +64,7 @@ class Datasets(object):
             event_info = []
             for path in self.dataset_paths:
                 dataset = self.open_dataset(path)
-                if dataset is not None:
+                if dataset is None:
                     continue
 
                 event_info.append(dataset.eventInfo())
@@ -100,8 +100,8 @@ def convert_events_information(event_info):
 
     data = defaultdict(list)
 
-    for ele in event_info.values():
-        for k, v in ele.items():
+    for ele in event_info:
+        for k, v in ele.__dict__.items():
             data[k].append(v)
 
     for k in data:
