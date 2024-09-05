@@ -90,7 +90,7 @@ def plot_blockoffset(event_info, runs, station):
     fig.savefig(f"{fname}_offsets.png")
 
 
-def plot_glitching(event_info, wfs, runs, station):
+def plot_glitching(event_info, runs, station):
 
     apply_norm = True
 
@@ -316,14 +316,15 @@ if __name__ == "__main__":
         ts = np.array([glitch_detection_per_event.is_channel_scrambled(wf) for wf in wfs.reshape(-1, 2048)]).reshape(wfs.shape[:2])
         event_info["glitching_test_statistics"] = ts
 
-        fit_blocks = []
-        for wfs_channel in np.swapaxes(wfs, 0, 1):
-            fit_blocks.append(np.array([fit_block_offsets(wf, sampling_rate=2.4) for wf in wfs_channel]))
-        fit_blocks = np.array(fit_blocks)
+        if 0:
+            fit_blocks = []
+            for wfs_channel in np.swapaxes(wfs, 0, 1):
+                fit_blocks.append(np.array([fit_block_offsets(wf, sampling_rate=2.4) for wf in wfs_channel]))
+            fit_blocks = np.array(fit_blocks)
 
-        # n_channel, n_events, n_blocks -> n_events, n_channels, n_blocks
-        fit_blocks = np.swapaxes(fit_blocks, 0, 1)
-        event_info["block_offsets"] = fit_blocks
+            # n_channel, n_events, n_blocks -> n_events, n_channels, n_blocks
+            fit_blocks = np.swapaxes(fit_blocks, 0, 1)
+            event_info["block_offsets"] = fit_blocks
 
         station = np.unique(event_info["station"])[0]
         runs = np.unique(event_info["run"])
@@ -333,4 +334,5 @@ if __name__ == "__main__":
 
     plot_glitching(event_info, runs, station)
     plot_rms(event_info, runs, station)
-    plot_blockoffset(event_info, runs, station)
+    if "block_offsets" in event_info:
+        plot_blockoffset(event_info, runs, station)
