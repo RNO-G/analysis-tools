@@ -92,7 +92,7 @@ def plot_blockoffset(event_info, runs, station):
 
 def plot_glitching(event_info, runs, station):
 
-    apply_norm = True
+    apply_norm = False
 
     ts = event_info["glitching_test_statistics"]
     std = event_info["waveform_std"]
@@ -102,15 +102,15 @@ def plot_glitching(event_info, runs, station):
 
     fig, ax = plt.subplots()
 
-    means = np.mean(ts, axis=0)
+    medians = np.median(ts, axis=0)
     parts = ax.violinplot(ts, np.arange(24), showextrema=True, showmedians=True,
                           vert=False, side="high", widths=1.8)
 
-    norm = colors.Normalize(vmin=np.amin(means), vmax=np.amax(means), clip=False)
+    norm = colors.Normalize(vmin=np.amin(medians), vmax=np.amax(medians), clip=False)
     sm = cm.ScalarMappable(norm, cmap="Oranges")
 
     for idx, pc in enumerate(parts['bodies']):
-        pc.set_facecolor(sm.to_rgba(means[idx]))
+        pc.set_facecolor(sm.to_rgba(medians[idx]))
         pc.set_alpha(0.5)
         pc.set_edgecolor("k")
 
@@ -124,7 +124,7 @@ def plot_glitching(event_info, runs, station):
     parts["cmedians"].set_linewidth(1)
 
     cb = plt.colorbar(sm, ax=ax, pad=0.02)
-    cb.set_label("mean value ts")
+    cb.set_label("median value ts")
 
     # for ch in range(24):
     #     mean = np.mean(ts[:, ch])
@@ -141,10 +141,13 @@ def plot_glitching(event_info, runs, station):
     ax.set_ylabel("channel")
     if not apply_norm:
         x1, x2 = ax.get_xlim()
-        ax.set_xlim(max(-50000, x1), min(50000, x2))
+        # ax.set_xlim(max(-50000, x1), min(50000, x2))
+        ax.set_xscale("symlog", linthresh=50000)
     else:
         x1, x2 = ax.get_xlim()
         #ax.set_xlim(max(-2000, x1), min(2000, x2))
+
+        ax.set_xscale("symlog", linthresh=2000)
 
     ax.grid()
 
@@ -313,7 +316,12 @@ if __name__ == "__main__":
 
         std = np.std(wfs, axis=-1)
         event_info["waveform_std"] = std
-        ts = np.array([glitch_detection_per_event.is_channel_scrambled(wf) for wf in wfs.reshape(-1, 2048)]).reshape(wfs.shape[:2])
+        ts = np.zeros(wfs.shape[:2])
+        for idx, wf in enumerate(wfs):
+            for ch in range(24):
+                ts[idx, ch] = glitch_detection_per_event.is_channel_scrambled(wf[ch])
+        ts2 = np.array([glitch_detection_per_event.is_channel_scrambled(wf) for wf in wfs.reshape(-1, 2048)]).reshape(wfs.shape[:2])
+        print(ts == ts2)
         event_info["glitching_test_statistics"] = ts
 
         if 0:
