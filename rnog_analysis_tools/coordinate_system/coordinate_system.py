@@ -63,8 +63,7 @@ class CoordinateSystem:
             origin[0],
             origin[1],
             origin[2],
-            None,
-            deg
+            deg=deg
         )
 
     def enu_to_geodetic(
@@ -99,8 +98,7 @@ class CoordinateSystem:
             origin[0],
             origin[1],
             origin[2],
-            None,
-            deg
+            deg=deg
         )
 
     def enu_to_enu(
