@@ -7,7 +7,7 @@ import numpy as np
 def coherent_sum(traces, ref_channel=0):
     """Obtain the coherently summed waveform from the phased array channels. This does vary slightly depending on the reference channel, and a more robust version will likely be created soon.
     
-    This is also currently using the hilbert evenlope, but may not be necessary if traces are upsampled.
+    This is also currently using the hilbert envelope, but may not be necessary if traces are upsampled.
     
     Args:
         traces (array): array containing channel waveforms (traces[0] should return ch 0's trace, traces[1] ch 1's trace, and so on for at least the phased array channels)
