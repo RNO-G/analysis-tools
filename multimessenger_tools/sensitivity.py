@@ -608,7 +608,7 @@ class SensitivityCalculator:
             self, zenith, time=Time('2024-04-20 12:00:00', scale="ut1"),
             azimuth=np.linspace(-180, 180, 100, endpoint=False) * u.deg):
         """ Wrapper around transfrom_local_to_equitorial """
-        return transfrom_local_to_equitorial(self.summit_station, zenith, time, azimuth)
+        return transfrom_local_to_equitorial(self.summit_station, zenith, azimuth, time)
 
     def is_in_fov(self, sky_corr, times):
         """ Wrapper around is_in_fov """
