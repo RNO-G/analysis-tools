@@ -160,16 +160,16 @@ def plot_integrated_fov():
 
 
 if __name__ == "__main__":
-    # plot_integrated_fov()
-    sc = sensitivity.SensitivityCalculator()
-    time = Time('2024-04-20 12:00:00', scale="ut1")
-    times = time + np.linspace(0, 24, 250) * u.hour
+    plot_integrated_fov()
+    # sc = sensitivity.SensitivityCalculator()
+    # time = Time('2024-04-20 12:00:00', scale="ut1")
+    # times = time + np.linspace(0, 24, 250) * u.hour
 
-    for t in times:
-        fig, ax = plt.subplots(figsize=(5, 3), subplot_kw=dict(projection='mollweide'))
-        draw_instantaneous_fov(ax, sc, t)
-        draw_sources(ax)
-        fig.tight_layout()
+    # for t in times:
+    #     fig, ax = plt.subplots(figsize=(5, 3), subplot_kw=dict(projection='mollweide'))
+    #     draw_instantaneous_fov(ax, sc, t)
+    #     draw_sources(ax)
+    #     fig.tight_layout()
 
-        plt.savefig(f"rnog_fov_{str(t)}.png", dpi=600, transparent=False)
-        plt.close()
+    #     plt.savefig(f"rnog_fov_{str(t)}.png", dpi=600, transparent=False)
+    #     plt.close()
