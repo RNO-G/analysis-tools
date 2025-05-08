@@ -122,7 +122,7 @@ def add_histogram_on_axis(fig, ax, data, n_bins=50, fraction=0.2, which="x", his
     return ax2, hist, edges, patches
 
 
-def draw_residual(ax, ax2, grid=True, relative=True, symetric_limits=True, label="residual"):
+def draw_residual(ax, ax2, ref=None, grid=True, relative=True, symetric_limits=True, label="residual"):
     """ Draws a residual for data of a given axis (ax) on a second axis (ax2).
 
     It uses the data in `ax.lines` and `ax.collections` to draw the residual.
@@ -141,58 +141,75 @@ def draw_residual(ax, ax2, grid=True, relative=True, symetric_limits=True, label
     symetric_limits : bool
         Whether to make the limits of the residual axis symmetric around 0 (absolute residual) or 1 (relative residual).
     """
-    try:
-        line0 = ax.lines[0]
-        color = line0.get_color()
-        x_ref = line0.get_xdata()
-        y_ref = line0.get_ydata()
-        is_line = True
-    except IndexError:
-        patch0 = ax.patches[0]
-        color = patch0.get_edgecolor()
-        x_ref, y_ref = patch0.get_path().vertices.T
-        is_line = False
 
+    has_lines = len(ax.lines)  # for "ax.plot"
+    has_patches = len(ax.patches)  # for "ax.hist"
+    has_collections = len(ax.collections)  # for "ax.fill_between"
 
-    if relative:
-        ax2.axhline(1, color=color, lw=2, ls="-")
-    else:
-        ax2.axhline(0, color=color, lw=2, ls="-")
+    if has_lines:
+        if ref is None:
+            line_ref = ax.lines[0]
+            x_ref = line_ref.get_xdata()
+            y_ref = line_ref.get_ydata()
 
-    for poly in ax.collections:
-        x, y = poly.get_paths()[0].vertices.T
-        ref_y_data = np.squeeze([y_ref[x_ref == x_val] for x_val in x])
+        for idx, line in enumerate(ax.lines):
 
-        try:
-            if relative:
-                ax2.plot(x, y / ref_y_data, alpha=0.5, color=poly.get_facecolor())
+            if ref is not None:
+                y_ref = ref(line.get_xdata())
+                x_ref = line.get_xdata()
+
+            if np.allclose(x_ref, line.get_xdata()):
+                y = line.get_ydata()
             else:
-                ax2.plot(x, y - ref_y_data, alpha=0.5, color=poly.get_facecolor())
-        except ValueError:
-            pass
+                y = np.interp(x_ref, line.get_xdata(), line.get_ydata(), left=np.nan, right=np.nan)
 
-    try:
-        for idx, line in enumerate(ax.lines[1:]):
-            assert np.allclose(x_ref, line.get_xdata())
-            if relative:
-                ax2.plot(line.get_xdata(), line.get_ydata() / y_ref, lw=1, color=line.get_color())
+            ydata = y / y_ref if relative else y - y_ref
+            ax2.plot(x_ref, ydata, lw=line.get_lw(), ls=line.get_ls(), color=line.get_color())
+
+    if has_collections:
+        if not has_lines:
+            raise ValueError("Cannot calculate residual for collections without lines")
+
+        if ref is None:
+            line_ref = ax.lines[0]
+            x_ref = line_ref.get_xdata()
+            y_ref = line_ref.get_ydata()
+
+        for poly in ax.collections:
+            x, y = poly.get_paths()[0].vertices.T
+
+            if ref is not None:
+                ref_y_data = ref(x)
             else:
-                ax2.plot(line.get_xdata(), line.get_ydata() - y_ref, lw=1, color=line.get_color())
-    except ValueError:
-        pass
+                ref_y_data = np.squeeze([y_ref[x_ref == x_val] for x_val in x])
 
-    for idx, patch in enumerate(ax.patches[1:]):
-        x, y = patch.get_path().vertices.T
-        assert np.allclose(x_ref, x)
+            ydata = y / ref_y_data if relative else y - ref_y_data
 
-        if relative:
-            ax2.plot(x, y / y_ref, lw=1, ls=patch.get_ls(), color=patch.get_edgecolor())
-        else:
-            ax2.plot(x, y - y_ref, lw=1, ls=patch.get_ls(), color=patch.get_edgecolor())
+            ax2.plot(x, ydata, alpha=0.5, color=poly.get_facecolor())
+
+    if has_patches:
+
+        if ref is None:
+            patch_ref = ax.patches[0]
+            x_ref, y_ref = patch_ref.get_path().vertices.T
+
+        for idx, patch in enumerate(ax.patches):
+            x, y = patch.get_path().vertices.T
+
+            if ref is not None:
+                y_ref = ref(x)
+                x_ref = x
+
+            if np.allclose(x_ref, x):
+                y = line.get_ydata()
+            else:
+                y = np.interp(x_ref, x, y, left=np.nan, right=np.nan)
+
+            ydata = y / y_ref if relative else y - y_ref
+            ax2.plot(x_ref, ydata, lw=line.get_lw(), ls=line.get_ls(), color=patch.get_edgecolor())
 
     ax2.grid(grid)
     ax2.set_ylabel(label)
-
 
     if symetric_limits:
         # make symmetric limits around 0 (absolute residual) or 1 (relative residual)
