@@ -4,12 +4,14 @@ from collections import defaultdict
 import datetime as dt
 import numpy as np
 import argparse
+import logging
 import sys
 
 from rnog_analysis_tools.glitch_unscrambler import glitch_detection_per_event
 
 from NuRadioReco.modules.io.RNO_G.readRNOGDataMattak import readRNOGData
 from NuRadioReco.modules.RNO_G.channelBlockOffsetFitter import fit_block_offsets
+from NuRadioReco.utilities import fft
 
 
 """
@@ -17,6 +19,15 @@ This script can be used to analyze RNO-G data runs. Examples are plotting the tr
 
 Pass a run directory with rootified files as argument to the script.
 """
+
+channel_groups = {
+    "PA": [0, 1, 2, 3],
+    "HPols": [4, 8, 11, 21],
+    "Upper VPols": [5, 6, 7],
+    "Helper VPols": [9, 10, 22, 23],
+    "LPDAs": list(range(12, 21),)
+}
+
 
 
 def convert_events_information(event_info, convert_to_arrays=True):
@@ -170,6 +181,48 @@ def plot_glitching(reader, event_info, wfs):
     fig.savefig(f"{fname}_glitching.png")
 
 
+def plot_spectrum(reader, event_info, wfs):
+
+    mask = event_info["triggerType"] == "FORCE"
+    wfs = np.copy(wfs)[mask]
+
+    spectras = fft.time2freq(wfs, sampling_rate=2.4)
+    print(spectras.shape)
+    freq = fft.freqs(num_samples=2048, sampling_rate=2.4)
+    avg_abs_spectra = np.mean(np.abs(spectras), axis=0)
+    print(avg_abs_spectra.shape)
+
+    fig, axs = plt.subplots(
+        2, 3, figsize=(12, 6), sharex=True, sharey=True,
+        gridspec_kw=dict(hspace=0.03, wspace=0.03, left=0.08, bottom=0.08, right=0.99, top=0.99))
+
+    for cg, ax in zip(channel_groups, axs.flatten()):
+        for ch in channel_groups[cg]:
+            ax.plot(freq, avg_abs_spectra[ch])
+        ax.plot(np.nan, np.nan, "k.", label=cg)
+        ax.legend()
+
+    if len(reader._datasets) == 1:
+        dset = reader._datasets[0]
+        fname = f"station{dset.station}_run{dset.run}"
+    else:
+        assert len(np.unique([dset.station for dset in reader._datasets]))
+        station = reader._datasets[0].station
+        fname = f"station{station}_run{reader._datasets[0].run}-{reader._datasets[-1].run}"
+
+    fig.supxlabel("frequency / GHz")
+    fig.supylabel(r"average spectrum / ADC$\,$GHz$^-1$")
+
+    axs.flatten()[-1].set_axis_off()
+
+    for ax in axs.flatten():
+        ax.tick_params(axis="both", which="both", direction="in", length=6, width=1, colors="k")
+        ax.grid(True, linestyle="--", alpha=0.7)
+
+    # fig.tight_layout()
+    fig.savefig(f"{fname}_average_spectrum.png")
+
+
 def plot_rms(reader, event_info, wfs):
 
     times = np.array([dt.datetime.fromtimestamp(ts) for ts in event_info["readoutTime"]])
@@ -232,14 +285,6 @@ def plot_rms(reader, event_info, wfs):
     fig, axs = plt.subplots(5, 1, figsize=(12, 6), sharex=True, sharey=False,
                             gridspec_kw=dict(hspace=0, wspace=0, left=0.06, bottom=0.09, right=0.99,
                                              top=0.85))
-
-    channel_groups = {
-        "PA": [0, 1, 2, 3],
-        "HPols": [4, 8, 11, 21],
-        "Upper VPols": [5, 6, 7],
-        "Helper VPols": [9, 10, 22, 23],
-        "LPDAs": list(range(12, 21),)
-    }
 
     for cg, ax in zip(channel_groups, axs.flatten()):
         for idx, trigger in enumerate(np.unique(event_info["triggerType"])):
@@ -369,7 +414,7 @@ if __name__ == "__main__":
     event_info = defaultdict(list)
 
     for batch in np.array_split(np.array(sys.argv[1:]), n_batches):
-        reader = readRNOGData(load_run_table=False)
+        reader = readRNOGData(load_run_table=False, log_level=logging.INFO)
         reader.begin(
             batch, convert_to_voltage=False, overwrite_sampling_rate=2.4)
 
@@ -398,3 +443,4 @@ if __name__ == "__main__":
     plot_glitching(reader, event_info, wfs)
     plot_rms(reader, event_info, wfs)
     plot_blockoffset(reader, event_info, wfs)
+    plot_spectrum(reader, event_info, wfs)
