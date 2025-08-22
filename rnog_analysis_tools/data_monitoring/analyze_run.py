@@ -1,10 +1,10 @@
-import numpy as np
-import sys
-from matplotlib import pyplot as plt
+
+from matplotlib import cm, colors, dates as md, pyplot as plt
 from collections import defaultdict
-import matplotlib.dates as md
 import datetime as dt
-from matplotlib import cm, colors
+import numpy as np
+import argparse
+import sys
 
 from rnog_analysis_tools.glitch_unscrambler import glitch_detection_per_event
 
@@ -355,7 +355,14 @@ def plot_triggers(reader, data):
 
 if __name__ == "__main__":
 
-    n_files = len(sys.argv[1:])    
+    argparser = argparse.ArgumentParser(description="Process RNO-G data and produce monitoring plots")
+    argparser.add_argument("files", nargs="+", help="List of files/runs to process")
+
+
+
+    args = argparser.parse_args()
+
+    n_files = len(args.files)
     n_batches = n_files // 100 + 1
 
     wfs = []
@@ -364,34 +371,29 @@ if __name__ == "__main__":
     for batch in np.array_split(np.array(sys.argv[1:]), n_batches):
         reader = readRNOGData(load_run_table=False)
         reader.begin(
-            batch, convert_to_voltage=False, overwrite_sampling_rate=2.4, check_trigger_time=False, mattak_kwargs=dict(skip_incomplete=False))
+            batch, convert_to_voltage=False, overwrite_sampling_rate=2.4)
 
         event_info_tmp = reader.get_events_information(
-            keys=["triggerType", "triggerTime", "readoutTime", "radiantThrs", "lowTrigThrs", "hasWaveforms"])
+            keys=["triggerType", "triggerTime", "readoutTime", "radiantThrs", "lowTrigThrs"])
 
-        wfs_tmp = reader.get_waveforms(max_events=None, override_skip_incomplete=True)
+        wfs_tmp = reader.get_waveforms(max_events=None)
         print(f"Found {len(wfs_tmp)} waveforms")
         event_info_tmp = convert_events_information(event_info_tmp, False)
 
         wfs += list(wfs_tmp)
-        
+
         for key, value in event_info_tmp.items():
             event_info[key] += value
 
-        
+
     for key, value in event_info.items():
         event_info[key] = np.array(value)
+
     wfs = np.array(wfs)
-    print(wfs.shape)
 
     inf_mask = np.isinf(event_info["triggerTime"])
     event_info["triggerTime"][inf_mask] = event_info["readoutTime"][inf_mask]
     print(f"Found {np.sum(inf_mask)} events with inf trigger time (of {len(inf_mask)} events)")
-
-    plot_triggers(reader, event_info)
-
-    for key, value in event_info.items():
-        event_info[key] = value[event_info["hasWaveforms"]]
 
     plot_glitching(reader, event_info, wfs)
     plot_rms(reader, event_info, wfs)
