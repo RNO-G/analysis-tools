@@ -55,9 +55,19 @@ def read_flower_data(path, read_data_in_volts=False):
 
     runinfo_file = f"{directory}/runinfo.txt"
     with open(runinfo_file, "r") as f:
-        first_row = f.readlines()[0].split(" ")
+        lines = f.readlines()
+        first_row = lines[0].split(" ")
         assert first_row[0] == "STATION", "Parsing of runinfo.txt went wrong"
         station = int(first_row[2])
+
+        third_row = lines[2].split("=")
+        assert third_row[0] == "RUN-START-TIME ", "Parsing of runinfo.txt went wrong, expected RUN-START-TIME on third line"
+        run_start_time = float(third_row[1])
+
+        last_row = lines[-1].split("=")
+        assert last_row[0] == "RUN-END-TIME ", "Parsing of runinfo.txt went wrong, expected RUN-END-TIME on last line"
+        run_end_time = float(last_row[1])
+
 
     flower_gain_file = f"{directory}/flower_gain_codes.0.txt"
     with open(flower_gain_file, "r") as f:
@@ -76,6 +86,8 @@ def read_flower_data(path, read_data_in_volts=False):
     json_data["cal_channel"] = channel
     json_data["atten"] = atten
     json_data["flower_gains"] = flower_gains
+    json_data["run_start_time"] = run_start_time
+    json_data["run_end_time"] = run_end_time
 
     if read_data_in_volts:
         volts_per_adc = adc_input_range / (2**nr_bits - 1)
@@ -172,28 +184,36 @@ class flowerDataset():
     Helper class for handling flower data, does require NuRadio to be installed
     """
     def __init__(self, filepath, read_data_in_volts):
-        from NuRadioReco.utilities.fft import time2freq, freq2time
         data_dict = read_flower_data(filepath, read_data_in_volts=read_data_in_volts)
         self.in_volts = read_data_in_volts
 
-        
         self.station_id = data_dict["station"]
         self.run = data_dict["run"]
         self.cal_channel = data_dict["cal_channel"]
         self.nr_channels = len(data_dict["flower_gains"])
+        self.run_start_time = data_dict["run_start_time"]
+        self.run_end_time = data_dict["run_end_time"]
 
         self.wfs = []
-        for event in data_dic["events"]:
+        for event in data_dict["events"]:
             wf_ch = []
             for channel_id in range(self.nr_channels):
                 wf_ch.append(event["ch"+str(channel_id)])
             self.wfs.append(wf_ch)
         self.wfs = np.array(self.wfs)
 
+        self.nr_events = len(data_dict["events"])
+        self.nr_samples = len(self.wfs[0][0])
+
+        #HARDCODED
+        self.sampling_rate = 0.472
+
     def save_average_spectrum(self, filename, filt=None, debug=False):
         """
         saves an frequency spectrum averaged over the run in this dataset
         """
+        import pickle
+        from NuRadioReco.utilities.fft import time2freq, freq2time
         frequencies = np.fft.rfftfreq(self.nr_samples, d=1./self.sampling_rate)
         
         spectra = time2freq(self.wfs, self.sampling_rate)
