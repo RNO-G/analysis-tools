@@ -7,13 +7,17 @@ from scipy.ndimage import maximum_filter1d, minimum_filter1d
 
 
 
-def read_flower_data(path, read_calibrated_data=False):
+def read_flower_data(path, read_data_in_volts=False):
     """Read flower data from a file/run.
 
     Parameters
     ----------
     path : str
         Path to the file or run directory.
+    
+    read_data_in_volts : bool
+        If True, will convert adc to volts by applying a linear conversion and
+        factoring out the digital flower gain
 
     Returns
     -------
@@ -73,7 +77,7 @@ def read_flower_data(path, read_calibrated_data=False):
     json_data["atten"] = atten
     json_data["flower_gains"] = flower_gains
 
-    if read_calibrated_data:
+    if read_data_in_volts:
         volts_per_adc = adc_input_range / (2**nr_bits - 1)
         gain_amplification = trigger_board_amplifications[flower_gains]
 
@@ -81,8 +85,8 @@ def read_flower_data(path, read_calibrated_data=False):
         nr_channels = len(flower_gains)
         for i,event in enumerate(events):
             for channel_id in range(nr_channels):
-                events[i]["ch"+str(channel_id)] = [wf*volts_per_adc/gain_amplification[channel_id]
-                                                   for wf in events[i]["ch"+str(channel_id)]]
+                events[i]["ch" + str(channel_id)] = [wf*volts_per_adc/gain_amplification[channel_id]
+                                                     for wf in events[i]["ch"+str(channel_id)]]
 
 
     return json_data
@@ -165,7 +169,7 @@ def calculate_snr(trace, coincidence_window_size, signal_window=None, noise_wind
 
 class flowerDataset():
     """
-    Helper class for handling flower data, does require NuRadio ro be installed
+    Helper class for handling flower data, does require NuRadio to be installed
     """
     def __init__(self, filepath):
         from NuRadioReco.utilities.fft import time2freq, freq2time
