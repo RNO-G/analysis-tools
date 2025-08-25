@@ -171,9 +171,10 @@ class flowerDataset():
     """
     Helper class for handling flower data, does require NuRadio to be installed
     """
-    def __init__(self, filepath):
+    def __init__(self, filepath, read_data_in_volts):
         from NuRadioReco.utilities.fft import time2freq, freq2time
-        data_dict = read_flower_data(filepath)
+        data_dict = read_flower_data(filepath, read_data_in_volts=read_data_in_volts)
+        self.in_volts = read_data_in_volts
 
         
         self.station_id = data_dict["station"]
