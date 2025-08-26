@@ -2,6 +2,7 @@ import json
 import gzip
 import os
 import libconf
+import matplotlib.pyplot as plt
 import numpy as np
 from scipy.ndimage import maximum_filter1d, minimum_filter1d
 
@@ -213,8 +214,8 @@ class flowerDataset():
         saves an frequency spectrum averaged over the run in this dataset
         """
         import pickle
-        from NuRadioReco.utilities.fft import time2freq, freq2time
-        frequencies = np.fft.rfftfreq(self.nr_samples, d=1./self.sampling_rate)
+        from NuRadioReco.utilities.fft import freqs, time2freq, freq2time
+        frequencies = freqs(self.nr_samples, self.sampling_rate)
         
         spectra = time2freq(self.wfs, self.sampling_rate)
         if filt is not None:
