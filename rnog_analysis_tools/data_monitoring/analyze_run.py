@@ -20,7 +20,7 @@ This script can be used to analyze RNO-G data runs. Examples are plotting the tr
 Pass a run directory with rootified files as argument to the script.
 """
 
-channel_groups = {
+channel_groups_first_seven = {
     "PA": [0, 1, 2, 3],
     "HPols": [4, 8, 11, 21],
     "Upper VPols": [5, 6, 7],
@@ -28,6 +28,13 @@ channel_groups = {
     "LPDAs": list(range(12, 21),)
 }
 
+channel_groups_14 = {
+    "PA": [0, 1, 2, 3],
+    "HPols": [4, 8, 11, 21],
+    "Upper VPols": [5, 6, 7, 20],
+    "Helper VPols": [9, 10, 22, 23],
+    "LPDAs": list(range(12, 20),)
+}
 
 
 def convert_events_information(event_info, convert_to_arrays=True):
@@ -196,6 +203,13 @@ def plot_spectrum(reader, event_info, wfs):
         2, 3, figsize=(12, 6), sharex=True, sharey=True,
         gridspec_kw=dict(hspace=0.03, wspace=0.03, left=0.08, bottom=0.08, right=0.99, top=0.99))
 
+    dset = reader._datasets[0]
+
+    if dset.station == 14:
+        channel_groups = channel_groups_14
+    else:
+        channel_groups = channel_groups_first_seven
+
     for cg, ax in zip(channel_groups, axs.flatten()):
         for ch in channel_groups[cg]:
             ax.plot(freq, avg_abs_spectra[ch])
@@ -203,11 +217,10 @@ def plot_spectrum(reader, event_info, wfs):
         ax.legend()
 
     if len(reader._datasets) == 1:
-        dset = reader._datasets[0]
         fname = f"station{dset.station}_run{dset.run}"
     else:
         assert len(np.unique([dset.station for dset in reader._datasets]))
-        station = reader._datasets[0].station
+        station = dset.station
         fname = f"station{station}_run{reader._datasets[0].run}-{reader._datasets[-1].run}"
 
     fig.supxlabel("frequency / GHz")
@@ -251,11 +264,18 @@ def plot_rms(reader, event_info, wfs):
 
         ax.plot(np.nan, np.nan, label=f"{trigger}: {len(std[mask])}", color=f"C{idx}")
 
+    dset = reader._datasets[0]
 
-    ax.axvspan(11.8, 20.8, color="grey", alpha=0.3, label="LPDAS")
+    if dset.station == 14:
+        ax.axvspan(11.8, 19.8, color="grey", alpha=0.3, label="LPDAS")
+        ax.axvspan(4.8, 7.8, color="C6", alpha=0.3, label="Upper VPols")
+        ax.axvspan(19.8, 20.8, color="C6", alpha=0.3)
+    else:
+        ax.axvspan(11.8, 20.8, color="grey", alpha=0.3, label="LPDAS")
+        ax.axvspan(4.8, 7.8, color="C6", alpha=0.3, label="Upper VPols")
+
     ax.axvspan(-0.2, 3.8, color="C5", alpha=0.3, label="PA")
-    ax.axvspan(4.8, 7.8, color="C6", alpha=0.3, label="Upper VPols")
-
+    
     ax.axvspan(8.8, 10.8, color="C4", alpha=0.3, label="Helper VPols")
     ax.axvspan(21.8, 23.8, color="C4", alpha=0.3)
 
@@ -272,11 +292,10 @@ def plot_rms(reader, event_info, wfs):
     ax.set_ylabel("std of waveforms / ADC")
 
     if len(reader._datasets) == 1:
-        dset = reader._datasets[0]
         fname = f"station{dset.station}_run{dset.run}"
     else:
         assert len(np.unique([dset.station for dset in reader._datasets]))
-        station = reader._datasets[0].station
+        station = dset.station
         fname = f"station{station}_run{reader._datasets[0].run}-{reader._datasets[-1].run}"
 
     fig.tight_layout()
@@ -285,6 +304,11 @@ def plot_rms(reader, event_info, wfs):
     fig, axs = plt.subplots(5, 1, figsize=(12, 6), sharex=True, sharey=False,
                             gridspec_kw=dict(hspace=0, wspace=0, left=0.06, bottom=0.09, right=0.99,
                                              top=0.85))
+
+    if dset.station == 14:
+        channel_groups = channel_groups_14
+    else:
+        channel_groups = channel_groups_first_seven
 
     for cg, ax in zip(channel_groups, axs.flatten()):
         for idx, trigger in enumerate(np.unique(event_info["triggerType"])):
@@ -301,7 +325,7 @@ def plot_rms(reader, event_info, wfs):
     for ax in axs[:-1]:
         ax.spines['bottom'].set_linewidth(0.1)
 
-    xfmt = md.DateFormatter('%m-%d %H:%M')
+    xfmt = md.DateFormatter('%Y-%m-%d')
     axs[-1].xaxis.set_major_formatter(xfmt)
     axs[-1].xaxis.set_tick_params(rotation=20)
     fig.supylabel("RMS")
@@ -324,8 +348,8 @@ def plot_triggers(reader, data):
         downwardfacing_radiantThrs = np.mean(data["radiantThrs"][:, [12, 14, 15, 17, 18, 20]], axis=1)
         upwardfacing_radiantThrs = np.mean(data["radiantThrs"][:, [13, 16, 19]], axis=1)
     else:
-        downwardfacing_radiantThrs = np.mean(data["radiantThrs"][:, [12, 14, 16, 18]], axis=1)
-        upwardfacing_radiantThrs = np.mean(data["radiantThrs"][:, [13, 15, 17, 19]], axis=1)
+        downwardfacing_radiantThrs = np.mean(data["radiantThrs"][:, [12, 14, 17, 19]], axis=1)
+        upwardfacing_radiantThrs = np.mean(data["radiantThrs"][:, [13, 15, 16, 18]], axis=1)
 
     lowTrigThrs = np.mean(data["lowTrigThrs"], axis=1)
 
