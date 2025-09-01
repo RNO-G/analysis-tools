@@ -1,4 +1,4 @@
-from rnog_analysis_tools.glitch_unscrambler.glitch_unscrambler import unscramble
+from .glitch_unscrambler import unscramble
 import numpy as np
 
 
