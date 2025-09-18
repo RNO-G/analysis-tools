@@ -1,5 +1,6 @@
-
+from astropy.time import Time
 from matplotlib import cm, colors, dates as md, pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 from collections import defaultdict
 import datetime as dt
 import numpy as np
@@ -221,6 +222,7 @@ def plot_spectrum(reader, event_info, wfs):
 
     # fig.tight_layout()
     fig.savefig(f"{fname}_average_spectrum.png")
+    return spectras
 
 
 def plot_rms(reader, event_info, wfs):
@@ -398,6 +400,48 @@ def plot_triggers(reader, data):
     fig2.savefig(f"{fname}_trigger_vs_time.png")
 
 
+def plot_spectrogram(reader, event_info, wfs, spectra, sampling_rate=2.4, nr_samples=2048, max_freq=1., nr_time_bins=100):
+    dset = reader._datasets[0]
+
+    frequencies = fft.freqs(nr_samples, sampling_rate)
+    mask = frequencies < max_freq
+    frequencies = frequencies[mask]
+    spectra_gain = np.abs(spectra)[:, :,mask]
+
+    readout_time_binned = [np.median(time) for time in np.array_split(event_info["readoutTime"], nr_time_bins)]
+    readout_time_dates = np.array([Time(time, format="unix").strftime("%Y %B %d") for time in readout_time_binned])
+    spectra_gain_binned = np.array([np.mean(spectrum_gain, axis=0) for spectrum_gain in np.array_split(spectra_gain, nr_time_bins)])
+    
+    plt.clf()
+    plt.plot(frequencies, np.mean(spectra_gain, axis=0)[0])
+    plt.savefig("test_spec")
+    plt.clf()
+
+    if len(reader._datasets) == 1:
+        dset = reader._datasets[0]
+        fname = f"station{dset.station}_run{dset.run}"
+    else:
+        assert len(np.unique([dset.station for dset in reader._datasets]))
+        station = reader._datasets[0].station
+        fname = f"station{station}_run{reader._datasets[0].run}-{reader._datasets[-1].run}"
+    
+    channel_ids = np.arange(24)
+    pdf = PdfPages(f"{fname}_spectrogram.pdf")
+    for channel_id in channel_ids:
+        fig, ax = plt.subplots()
+        im = ax.pcolormesh(readout_time_binned, frequencies, spectra_gain_binned[:, channel_id].T, shading="gouraud")
+        ax.set_xticks(readout_time_binned, labels=readout_time_dates, rotation=-90, ha="left")
+        ax.set_xlabel("date")
+        ax.set_ylabel("freq / GHz")
+        ax.set_title(f"Channel {channel_id}")
+        cbar = fig.colorbar(im, label="ADC/GHz")
+        fig.savefig(pdf, format="pdf", bbox_inches="tight", dpi=120)
+        plt.close(fig)
+    pdf.close()
+
+
+
+
 if __name__ == "__main__":
 
     argparser = argparse.ArgumentParser(description="Process RNO-G data and produce monitoring plots")
@@ -443,4 +487,5 @@ if __name__ == "__main__":
     plot_glitching(reader, event_info, wfs)
     plot_rms(reader, event_info, wfs)
     plot_blockoffset(reader, event_info, wfs)
-    plot_spectrum(reader, event_info, wfs)
+    spectra = plot_spectrum(reader, event_info, wfs)
+    plot_spectrogram(reader, event_info, wfs, spectra)
