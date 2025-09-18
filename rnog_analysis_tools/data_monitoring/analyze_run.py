@@ -400,7 +400,7 @@ def plot_triggers(reader, data):
     fig2.savefig(f"{fname}_trigger_vs_time.png")
 
 
-def plot_spectrogram(reader, event_info, wfs, spectra, sampling_rate=2.4, nr_samples=2048, max_freq=1., nr_time_bins=100):
+def plot_spectrogram(reader, event_info, wfs, spectra, sampling_rate=2.4, nr_samples=2048, max_freq=1., nr_time_bins=100, nr_xticks=10):
     dset = reader._datasets[0]
 
     frequencies = fft.freqs(nr_samples, sampling_rate)
@@ -429,8 +429,9 @@ def plot_spectrogram(reader, event_info, wfs, spectra, sampling_rate=2.4, nr_sam
     pdf = PdfPages(f"{fname}_spectrogram.pdf")
     for channel_id in channel_ids:
         fig, ax = plt.subplots()
-        im = ax.pcolormesh(readout_time_binned, frequencies, spectra_gain_binned[:, channel_id].T, shading="gouraud")
-        ax.set_xticks(readout_time_binned, labels=readout_time_dates, rotation=-90, ha="left")
+        im = ax.pcolormesh(np.arange(len(readout_time_binned)), frequencies, spectra_gain_binned[:, channel_id].T, shading="gouraud")
+        step_xticks = int(len(readout_time_binned)/nr_xticks)
+        ax.set_xticks(np.arange(len(readout_time_binned))[::step_xticks], labels=readout_time_dates[::step_xticks], rotation=-90, ha="left")
         ax.set_xlabel("date")
         ax.set_ylabel("freq / GHz")
         ax.set_title(f"Channel {channel_id}")
