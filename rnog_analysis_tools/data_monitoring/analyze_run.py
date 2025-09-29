@@ -109,7 +109,7 @@ def plot_blockoffset(reader, event_info, wfs):
     else:
         assert len(np.unique([dset.station for dset in reader._datasets]))
         station = reader._datasets[0].station
-        fname = f"station{station}_run{reader._datasets[0].run}-{reader._datasets[-1].run}"
+        fname = f"station{station}_run{event_info['run'][0]}-{event_info['run'][-1]}"
 
     fig.tight_layout()
     fig.savefig(f"{fname}_offsets.png")
@@ -179,7 +179,7 @@ def plot_glitching(reader, event_info, wfs):
     else:
         assert len(np.unique([dset.station for dset in reader._datasets]))
         station = reader._datasets[0].station
-        fname = f"station{station}_run{reader._datasets[0].run}-{reader._datasets[-1].run}"
+        fname = f"station{station}_run{event_info["run"][0]}-{event_info["run"][-1]}"
 
     if apply_norm:
         fname += "_norm"
@@ -212,7 +212,8 @@ def plot_spectrum(reader, event_info, wfs):
 
     for cg, ax in zip(channel_groups, axs.flatten()):
         for ch in channel_groups[cg]:
-            ax.plot(freq, avg_abs_spectra[ch])
+            ax.plot(freq, avg_abs_spectra[ch], label=f"Ch {ch}")
+            ax.legend()
         ax.plot(np.nan, np.nan, "k.", label=cg)
         ax.legend()
 
@@ -221,7 +222,7 @@ def plot_spectrum(reader, event_info, wfs):
     else:
         assert len(np.unique([dset.station for dset in reader._datasets]))
         station = dset.station
-        fname = f"station{station}_run{reader._datasets[0].run}-{reader._datasets[-1].run}"
+        fname = f"station{station}_run{event_info['run'][0]}-{event_info['run'][-1]}"
 
     fig.supxlabel("frequency / GHz")
     fig.supylabel(r"average spectrum / ADC$\,$GHz$^-1$")
@@ -296,7 +297,7 @@ def plot_rms(reader, event_info, wfs):
     else:
         assert len(np.unique([dset.station for dset in reader._datasets]))
         station = dset.station
-        fname = f"station{station}_run{reader._datasets[0].run}-{reader._datasets[-1].run}"
+        fname = f"station{station}_run{event_info['run'][0]}-{event_info['run'][-1]}"
 
     fig.tight_layout()
     fig.savefig(f"{fname}_rms_hist.png")
@@ -412,7 +413,7 @@ def plot_triggers(reader, data):
     else:
         assert len(np.unique([dset.station for dset in reader._datasets]))
         station = reader._datasets[0].station
-        fname = f"station{station}_run{reader._datasets[0].run}-{reader._datasets[-1].run}"
+        fname = f"station{station}_run{event_info['run'][0]}-{event_info['run'][-1]}"
 
 
     fig.tight_layout()
@@ -443,7 +444,7 @@ if __name__ == "__main__":
             batch, convert_to_voltage=False, overwrite_sampling_rate=2.4)
 
         event_info_tmp = reader.get_events_information(
-            keys=["triggerType", "triggerTime", "readoutTime", "radiantThrs", "lowTrigThrs"])
+            keys=["triggerType", "triggerTime", "readoutTime", "radiantThrs", "lowTrigThrs", "eventNumber", "run"])
 
         wfs_tmp = reader.get_waveforms(max_events=None)
         print(f"Found {len(wfs_tmp)} waveforms")
