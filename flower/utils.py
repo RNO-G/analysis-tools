@@ -98,8 +98,8 @@ def read_flower_data(path, read_data_in_volts=False):
         nr_channels = len(flower_gains)
         for i,event in enumerate(events):
             for channel_id in range(nr_channels):
-                events[i]["ch" + str(channel_id)] = [wf*volts_per_adc/gain_amplification[channel_id]
-                                                     for wf in events[i]["ch"+str(channel_id)]]
+                events[i]["ch" + str(channel_id)] = [adc*volts_per_adc/gain_amplification[channel_id]
+                                                     for adc in events[i]["ch"+str(channel_id)]]
 
 
     return json_data
