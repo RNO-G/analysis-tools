@@ -6,9 +6,7 @@ import numpy as np
 import argparse
 import logging
 import sys
-
 from rnog_analysis_tools.glitch_unscrambler import glitch_detection_per_event
-
 from NuRadioReco.modules.io.RNO_G.readRNOGDataMattak import readRNOGData
 from NuRadioReco.modules.RNO_G.channelBlockOffsetFitter import fit_block_offsets
 from NuRadioReco.utilities import fft
@@ -103,14 +101,18 @@ def plot_blockoffset(reader, event_info, wfs):
     ax.legend()
     ax.grid()
 
-    if len(reader._datasets) == 1:
-        dset = reader._datasets[0]
-        fname = f"station{dset.station}_run{dset.run}"
-    else:
-        assert len(np.unique([dset.station for dset in reader._datasets]))
-        station = reader._datasets[0].station
-        fname = f"station{station}_run{event_info['run'][0]}-{event_info['run'][-1]}"
+    dsetpaths = reader._datasets_paths
+    if len(dsetpaths) == 1:
+         station = dsetpaths[0].split("/")[3]
+         run =  dsetpaths[0].split("/")[4]
+         fname = f"{station}_{run}"
 
+    else:
+        station = dsetpaths[0].split("/")[3]
+        initial_run =  dsetpaths[0].split("/")[4]
+        last_run = dsetpaths[-1].split("/")[4]
+        fname = f"{station}_{initial_run}-{last_run}"
+        
     fig.tight_layout()
     fig.savefig(f"{fname}_offsets.png")
 
@@ -173,13 +175,18 @@ def plot_glitching(reader, event_info, wfs):
 
     ax.grid()
 
-    if len(reader._datasets) == 1:
-        dset = reader._datasets[0]
-        fname = f"station{dset.station}_run{dset.run}"
+    dsetpaths = reader._datasets_paths
+    if len(dsetpaths) == 1:
+         station = dsetpaths[0].split("/")[3]
+         run =  dsetpaths[0].split("/")[4]
+         fname = f"{station}_{run}"
+        
     else:
-        assert len(np.unique([dset.station for dset in reader._datasets]))
-        station = reader._datasets[0].station
-        fname = f"station{station}_run{event_info["run"][0]}-{event_info["run"][-1]}"
+        station = dsetpaths[0].split("/")[3]
+        initial_run =  dsetpaths[0].split("/")[4]
+        last_run = dsetpaths[-1].split("/")[4]
+        fname = f"{station}_{initial_run}-{last_run}"   
+          
 
     if apply_norm:
         fname += "_norm"
@@ -203,27 +210,32 @@ def plot_spectrum(reader, event_info, wfs):
         2, 3, figsize=(12, 6), sharex=True, sharey=True,
         gridspec_kw=dict(hspace=0.03, wspace=0.03, left=0.08, bottom=0.08, right=0.99, top=0.99))
 
-    dset = reader._datasets[0]
-
-    if dset.station == 14:
+    dsetpaths = reader._datasets_paths
+    station_id = int(dsetpaths[0].split("/")[3][7:])
+    
+    if station_id == 14:
         channel_groups = channel_groups_14
     else:
         channel_groups = channel_groups_first_seven
 
     for cg, ax in zip(channel_groups, axs.flatten()):
         for ch in channel_groups[cg]:
-            ax.plot(freq, avg_abs_spectra[ch], label=f"Ch {ch}")
-            ax.legend()
+            ax.plot(freq, avg_abs_spectra[ch])
         ax.plot(np.nan, np.nan, "k.", label=cg)
         ax.legend()
 
-    if len(reader._datasets) == 1:
-        fname = f"station{dset.station}_run{dset.run}"
-    else:
-        assert len(np.unique([dset.station for dset in reader._datasets]))
-        station = dset.station
-        fname = f"station{station}_run{event_info['run'][0]}-{event_info['run'][-1]}"
+    dsetpaths = reader._datasets_paths
+    if len(dsetpaths) == 1:
+         station = dsetpaths[0].split("/")[3]
+         run =  dsetpaths[0].split("/")[4]
+         fname = f"{station}_{run}"
 
+    else:
+        station = dsetpaths[0].split("/")[3]
+        initial_run =  dsetpaths[0].split("/")[4]
+        last_run = dsetpaths[-1].split("/")[4]
+        fname = f"{station}_{initial_run}-{last_run}"
+                
     fig.supxlabel("frequency / GHz")
     fig.supylabel(r"average spectrum / ADC$\,$GHz$^-1$")
 
@@ -265,9 +277,10 @@ def plot_rms(reader, event_info, wfs):
 
         ax.plot(np.nan, np.nan, label=f"{trigger}: {len(std[mask])}", color=f"C{idx}")
 
-    dset = reader._datasets[0]
-
-    if dset.station == 14:
+    dsetpaths = reader._datasets_paths
+    station_id = int(dsetpaths[0].split("/")[3][7:])
+        
+    if station_id == 14:
         ax.axvspan(11.8, 19.8, color="grey", alpha=0.3, label="LPDAS")
         ax.axvspan(4.8, 7.8, color="C6", alpha=0.3, label="Upper VPols")
         ax.axvspan(19.8, 20.8, color="C6", alpha=0.3)
@@ -292,21 +305,27 @@ def plot_rms(reader, event_info, wfs):
     ax.set_xlabel("channels")
     ax.set_ylabel("std of waveforms / ADC")
 
-    if len(reader._datasets) == 1:
-        fname = f"station{dset.station}_run{dset.run}"
-    else:
-        assert len(np.unique([dset.station for dset in reader._datasets]))
-        station = dset.station
-        fname = f"station{station}_run{event_info['run'][0]}-{event_info['run'][-1]}"
+    dsetpaths = reader._datasets_paths
+    if len(dsetpaths) == 1:
+         station = dsetpaths[0].split("/")[3]
+         run =  dsetpaths[0].split("/")[4]
+         fname = f"{station}_{run}"
 
+    else:
+        station = dsetpaths[0].split("/")[3]
+        initial_run =  dsetpaths[0].split("/")[4]
+        last_run = dsetpaths[-1].split("/")[4]
+        fname = f"{station}_{initial_run}-{last_run}"
+                
     fig.tight_layout()
     fig.savefig(f"{fname}_rms_hist.png")
 
     fig, axs = plt.subplots(5, 1, figsize=(12, 6), sharex=True, sharey=False,
                             gridspec_kw=dict(hspace=0, wspace=0, left=0.06, bottom=0.09, right=0.99,
                                              top=0.85))
-
-    if dset.station == 14:
+    dsetpaths = reader._datasets_paths
+    station_id = int(dsetpaths[0].split("/")[3][7:])
+    if station_id == 14:
         channel_groups = channel_groups_14
     else:
         channel_groups = channel_groups_first_seven
@@ -344,8 +363,10 @@ def plot_rms(reader, event_info, wfs):
 
 def plot_triggers(reader, data):
 
-    dset = reader._datasets[0]
-    if dset.station != 14:
+    #dset = reader._datasets[0]
+    dsetpaths = reader._datasets_paths
+    station_id = int(dsetpaths[0].split("/")[3][7:])
+    if station_id != 14:
         downwardfacing_radiantThrs = np.mean(data["radiantThrs"][:, [12, 14, 15, 17, 18, 20]], axis=1)
         upwardfacing_radiantThrs = np.mean(data["radiantThrs"][:, [13, 16, 19]], axis=1)
     else:
@@ -407,14 +428,18 @@ def plot_triggers(reader, data):
     ax2.set_yscale("log")
     ax2.legend()
 
-    if len(reader._datasets) == 1:
-        dset = reader._datasets[0]
-        fname = f"station{dset.station}_run{dset.run}"
-    else:
-        assert len(np.unique([dset.station for dset in reader._datasets]))
-        station = reader._datasets[0].station
-        fname = f"station{station}_run{event_info['run'][0]}-{event_info['run'][-1]}"
+    dsetpaths = reader._datasets_paths
+    if len(dsetpaths) == 1:
+         station = dsetpaths[0].split("/")[3]
+         run =  dsetpaths[0].split("/")[4]
+         fname = f"{station}_{run}"
 
+    else:
+        station = dsetpaths[0].split("/")[3]
+        initial_run =  dsetpaths[0].split("/")[4]
+        last_run = dsetpaths[-1].split("/")[4]
+        fname = f"{station}_{initial_run}-{last_run}"
+                
 
     fig.tight_layout()
     fig.savefig(f"{fname}_trigger_hist.png")
@@ -432,33 +457,25 @@ if __name__ == "__main__":
 
     args = argparser.parse_args()
 
-    n_files = len(args.files)
-    n_batches = n_files // 100 + 1
+    #n_files = len(args.files)
+    #n_batches = n_files // 100 + 1
 
     wfs = []
     event_info = defaultdict(list)
+    
+    reader = readRNOGData(load_run_table=False, log_level=logging.INFO)
+    reader.begin(sys.argv[1:], convert_to_voltage=False, overwrite_sampling_rate=2.4)
 
-    for batch in np.array_split(np.array(sys.argv[1:]), n_batches):
-        reader = readRNOGData(load_run_table=False, log_level=logging.INFO)
-        reader.begin(
-            batch, convert_to_voltage=False, overwrite_sampling_rate=2.4)
+    event_info_tmp = reader.get_events_information(
+        keys=["triggerType", "triggerTime", "readoutTime", "radiantThrs", "lowTrigThrs"])
 
-        event_info_tmp = reader.get_events_information(
-            keys=["triggerType", "triggerTime", "readoutTime", "radiantThrs", "lowTrigThrs", "eventNumber", "run"])
+    wfs = reader.get_waveforms(max_events=None)
+    event_info = convert_events_information(event_info_tmp, False)
 
-        wfs_tmp = reader.get_waveforms(max_events=None)
-        print(f"Found {len(wfs_tmp)} waveforms")
-        event_info_tmp = convert_events_information(event_info_tmp, False)
-
-        wfs += list(wfs_tmp)
-
-        for key, value in event_info_tmp.items():
-            event_info[key] += value
-
-
+    
     for key, value in event_info.items():
         event_info[key] = np.array(value)
-
+    
     wfs = np.array(wfs)
 
     inf_mask = np.isinf(event_info["triggerTime"])
@@ -469,3 +486,5 @@ if __name__ == "__main__":
     plot_rms(reader, event_info, wfs)
     plot_blockoffset(reader, event_info, wfs)
     plot_spectrum(reader, event_info, wfs)
+
+
