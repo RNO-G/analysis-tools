@@ -103,15 +103,14 @@ def plot_blockoffset(reader, event_info, wfs):
 
     dsetpaths = reader._datasets_paths
     if len(dsetpaths) == 1:
-         station = dsetpaths[0].split("/")[3]
-         run =  dsetpaths[0].split("/")[4]
-         fname = f"{station}_{run}"
+         station_id= reader.get_station_id()
+         run_id = reader.get_run_numbers()
+         fname = f"station{station_id}_run{run_id[0]}"
 
     else:
-        station = dsetpaths[0].split("/")[3]
-        initial_run =  dsetpaths[0].split("/")[4]
-        last_run = dsetpaths[-1].split("/")[4]
-        fname = f"{station}_{initial_run}-{last_run}"
+        station_id = reader.get_station_id()
+        run_ids = reader.get_run_numbers()
+        fname = f"station{station_id}_run{run_ids[0]}-run{run_ids[-1]}"
         
     fig.tight_layout()
     fig.savefig(f"{fname}_offsets.png")
@@ -177,15 +176,14 @@ def plot_glitching(reader, event_info, wfs):
 
     dsetpaths = reader._datasets_paths
     if len(dsetpaths) == 1:
-         station = dsetpaths[0].split("/")[3]
-         run =  dsetpaths[0].split("/")[4]
-         fname = f"{station}_{run}"
-        
+         station_id= reader.get_station_id()
+         run_id = reader.get_run_numbers()
+         fname = f"station{station_id}_run{run_id[0]}"
+
     else:
-        station = dsetpaths[0].split("/")[3]
-        initial_run =  dsetpaths[0].split("/")[4]
-        last_run = dsetpaths[-1].split("/")[4]
-        fname = f"{station}_{initial_run}-{last_run}"   
+        station_id = reader.get_station_id()
+        run_ids = reader.get_run_numbers()
+        fname = f"station{station_id}_run{run_ids[0]}-run{run_ids[-1]}"
           
 
     if apply_norm:
@@ -211,7 +209,7 @@ def plot_spectrum(reader, event_info, wfs):
         gridspec_kw=dict(hspace=0.03, wspace=0.03, left=0.08, bottom=0.08, right=0.99, top=0.99))
 
     dsetpaths = reader._datasets_paths
-    station_id = int(dsetpaths[0].split("/")[3][7:])
+    station_id = reader.get_station_id()
     
     if station_id == 14:
         channel_groups = channel_groups_14
@@ -226,15 +224,16 @@ def plot_spectrum(reader, event_info, wfs):
 
     dsetpaths = reader._datasets_paths
     if len(dsetpaths) == 1:
-         station = dsetpaths[0].split("/")[3]
-         run =  dsetpaths[0].split("/")[4]
-         fname = f"{station}_{run}"
+         station_id= reader.get_station_id()
+         run_id = reader.get_run_numbers()
+         fname = f"station{station_id}_run{run_id[0]}"
 
     else:
-        station = dsetpaths[0].split("/")[3]
-        initial_run =  dsetpaths[0].split("/")[4]
-        last_run = dsetpaths[-1].split("/")[4]
-        fname = f"{station}_{initial_run}-{last_run}"
+        station_id = reader.get_station_id()
+        run_ids = reader.get_run_numbers()
+        fname = f"station{station_id}_run{run_ids[0]}-run{run_ids[-1]}"
+
+
                 
     fig.supxlabel("frequency / GHz")
     fig.supylabel(r"average spectrum / ADC$\,$GHz$^-1$")
@@ -278,7 +277,7 @@ def plot_rms(reader, event_info, wfs):
         ax.plot(np.nan, np.nan, label=f"{trigger}: {len(std[mask])}", color=f"C{idx}")
 
     dsetpaths = reader._datasets_paths
-    station_id = int(dsetpaths[0].split("/")[3][7:])
+    station_id = reader.get_station_id()
         
     if station_id == 14:
         ax.axvspan(11.8, 19.8, color="grey", alpha=0.3, label="LPDAS")
@@ -307,15 +306,16 @@ def plot_rms(reader, event_info, wfs):
 
     dsetpaths = reader._datasets_paths
     if len(dsetpaths) == 1:
-         station = dsetpaths[0].split("/")[3]
-         run =  dsetpaths[0].split("/")[4]
-         fname = f"{station}_{run}"
+         station_id= reader.get_station_id()
+         run_id = reader.get_run_numbers()
+         fname = f"station{station_id}_run{run_id[0]}"
 
     else:
-        station = dsetpaths[0].split("/")[3]
-        initial_run =  dsetpaths[0].split("/")[4]
-        last_run = dsetpaths[-1].split("/")[4]
-        fname = f"{station}_{initial_run}-{last_run}"
+        station_id = reader.get_station_id()
+        run_ids = reader.get_run_numbers()
+        fname = f"station{station_id}_run{run_ids[0]}-run{run_ids[-1]}"
+
+
                 
     fig.tight_layout()
     fig.savefig(f"{fname}_rms_hist.png")
@@ -324,7 +324,7 @@ def plot_rms(reader, event_info, wfs):
                             gridspec_kw=dict(hspace=0, wspace=0, left=0.06, bottom=0.09, right=0.99,
                                              top=0.85))
     dsetpaths = reader._datasets_paths
-    station_id = int(dsetpaths[0].split("/")[3][7:])
+    station_id = reader.get_station_id()
     if station_id == 14:
         channel_groups = channel_groups_14
     else:
@@ -363,9 +363,8 @@ def plot_rms(reader, event_info, wfs):
 
 def plot_triggers(reader, data):
 
-    #dset = reader._datasets[0]
     dsetpaths = reader._datasets_paths
-    station_id = int(dsetpaths[0].split("/")[3][7:])
+    station_id = reader.get_station_id()
     if station_id != 14:
         downwardfacing_radiantThrs = np.mean(data["radiantThrs"][:, [12, 14, 15, 17, 18, 20]], axis=1)
         upwardfacing_radiantThrs = np.mean(data["radiantThrs"][:, [13, 16, 19]], axis=1)
@@ -430,16 +429,14 @@ def plot_triggers(reader, data):
 
     dsetpaths = reader._datasets_paths
     if len(dsetpaths) == 1:
-         station = dsetpaths[0].split("/")[3]
-         run =  dsetpaths[0].split("/")[4]
-         fname = f"{station}_{run}"
+         station_id= reader.get_station_id()
+         run_id = reader.get_run_numbers()
+         fname = f"station{station_id}_run{run_id[0]}"
 
     else:
-        station = dsetpaths[0].split("/")[3]
-        initial_run =  dsetpaths[0].split("/")[4]
-        last_run = dsetpaths[-1].split("/")[4]
-        fname = f"{station}_{initial_run}-{last_run}"
-                
+        station_id = reader.get_station_id()
+        run_ids = reader.get_run_numbers()
+        fname = f"station{station_id}_run{run_ids[0]}-run{run_ids[-1]}"
 
     fig.tight_layout()
     fig.savefig(f"{fname}_trigger_hist.png")
