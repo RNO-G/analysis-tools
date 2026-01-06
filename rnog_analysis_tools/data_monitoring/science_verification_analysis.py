@@ -17,7 +17,7 @@ import NuRadioReco.framework.channel
 import NuRadioReco.framework.trigger
 from NuRadioReco.framework.parameters import channelParameters as chp
 from NuRadioReco.modules.RNO_G.dataProviderRNOG import dataProviderRNOG
-
+from cycler import cycler
 import matplotlib as mpl
 #from cmap import Colormap
 from collections import defaultdict
@@ -41,8 +41,18 @@ STATION_14_DOWNWARD_CHANNELS_LIST = [12, 14, 17, 19]
 STATION_14_ALL_CHANNELS_LIST = STATION_14_SURFACE_CHANNELS_LIST + STATION_14_DEEP_CHANNELS_LIST
 
 # Matplotlib settings
-# cm = Colormap('tol:muted')
-# colors = cm.colors
+
+CALM_DISTINCT = [
+    "#4477AA",  # blue
+    "#66CCEE",  # cyan
+    "#228833",  # green
+    "#CCBB44",  # olive/yellow
+    "#EE6677",  # soft red
+    "#AA3377",  # purple
+    "#BBBBBB",  # gray
+    "#332288",  # deep indigo
+]
+
 
 mpl.rcParams.update({
     'font.family': 'sans-serif',
@@ -54,7 +64,7 @@ mpl.rcParams.update({
     'axes.linewidth': 1.2,
     'axes.grid': False,
 
- #   'axes.prop_cycle': cycler(colors=colors),
+    'axes.prop_cycle': cycler('color', CALM_DISTINCT),
 
     'xtick.labelsize': 17,
     'ytick.labelsize': 17,
@@ -156,7 +166,7 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
         tableReader.begin(files=batch.tolist(), 
                           det=None,
                           reader_kwargs={"overwrite_sampling_rate":2.4*units.GHz, 
-                                         "convert_to_voltage":False,
+                                         "convert_to_voltage":True,
                                          "apply_baseline_correction":"auto",
                                          "mattak_kwargs":{"backend":backend}})
         event_info_tmp = tableReader.reader.get_events_information(
@@ -230,10 +240,48 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
     event_info["triggerTime"][inf_mask] = event_info["readoutTime"][inf_mask]
     print(f"Found {np.sum(inf_mask)} events with inf trigger time (of {len(inf_mask)} events)")
 
+    return spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info
+
     #print(f"n_events read: {spec_arr.shape[1]}, n_events_total: {n_events_total}")
     #print(f"freqs shape: {freqs.shape}, spec_arr shape: {spec_arr.shape}, trace_arr shape: {trace_arr.shape}, times_trace_arr shape: {times_trace_arr.shape}, snr_arr shape: {snr_arr.shape}")
     #print(f"freqs {freqs}")
     #print(f"trigger types: {np.unique(event_info['triggerType'])}")
+
+def plot_time_integrated_surface_spectra_unnormalized(spec_arr, freqs, upward_channels, downward_channels):
+    '''Plot time-integrated surface channel spectra.'''
+    plt.figure(figsize=(10, 6))
+    for ch in upward_channels:
+        spec_mean = np.mean(spec_arr[ch, :, :], axis=0)
+        plt.plot(freqs / units.MHz, spec_mean, label=f'Ch {ch} (up)', linestyle='-')
+    for ch in downward_channels:
+        spec_mean = np.mean(spec_arr[ch, :, :], axis=0)
+        plt.plot(freqs / units.MHz, spec_mean, label=f'Ch {ch} (down)', linestyle='--')
+    plt.xlabel('Frequency [MHz]')
+    plt.xlim(0, 800)
+    plt.ylabel('Mean Amplitude Spectrum [V/GHz]')
+    plt.title('Time-Integrated Spectrum of Surface Channels')
+    plt.legend()
+    plt.grid()
+    plt.tight_layout()
+    plt.savefig('time_integrated_surface_spectra_unnormalized.png')
+
+def plot_time_integrated_surface_spectra_normalized(norm_spec_arr, freqs, upward_channels, downward_channels):
+    '''Plot time-integrated surface channel spectra.'''
+    plt.figure(figsize=(10, 6))
+    for ch in upward_channels:
+        spec_mean = np.mean(norm_spec_arr[ch, :, :], axis=0)
+        plt.plot(freqs / units.MHz, spec_mean, label=f'Ch {ch} (up)', linestyle='-')
+    for ch in downward_channels:
+        spec_mean = np.mean(norm_spec_arr[ch, :, :], axis=0)
+        plt.plot(freqs / units.MHz, spec_mean, label=f'Ch {ch} (down)', linestyle='--')
+    plt.xlabel('Frequency [MHz]')
+    plt.xlim(0, 800)
+    plt.ylabel('Mean Amplitude Spectrum [V/GHz]')
+    plt.title('Time-Integrated Spectrum of Surface Channels')
+    plt.legend()
+    plt.grid()
+    plt.tight_layout()
+    plt.savefig('time_integrated_surface_spectra_normalized.png')
 
 if __name__ == "__main__":
 
@@ -269,7 +317,9 @@ if __name__ == "__main__":
         runtable = read_rnog_runtable(station_id, start_time, stop_time)
         run_numbers = runtable['run_number'].tolist()
 
-    read_rnog_data(station_id, run_numbers, backend=backend)
+    spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info = read_rnog_data(station_id, run_numbers, backend=backend) 
+    norm_spec_arr, scale_factors = normalize_surface_channels_to_down_reference(spec_arr, freqs, downward_channels, upward_channels)
 
-    
+    plot_time_integrated_surface_spectra_unnormalized(spec_arr, freqs, upward_channels, downward_channels)
+    plot_time_integrated_surface_spectra_normalized(norm_spec_arr, freqs, upward_channels, downward_channels)
 
