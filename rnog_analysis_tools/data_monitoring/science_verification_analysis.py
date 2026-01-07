@@ -21,6 +21,8 @@ from cycler import cycler
 import matplotlib as mpl
 #from cmap import Colormap
 from collections import defaultdict
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 
 '''
 This module can be used to test if the stations are working as expected.
@@ -83,7 +85,7 @@ mpl.rcParams.update({
 
     'legend.fontsize': 14,
     'legend.frameon': False,
-    'legend.handlelength': 2.2,
+    'legend.handlelength': 1,
     'legend.borderpad': 0.3,
 
     'figure.dpi': 120,
@@ -161,11 +163,11 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
 
     from NuRadioReco.modules.channelSignalReconstructor import channelSignalReconstructor as csr
 
-    for batch in np.array_split(np.array(file_list), n_batches):
+    for batch in tqdm(np.array_split(np.array(file_list), n_batches), desc="Reading batches", unit="batch"):
         tableReader = dataProviderRNOG()
         tableReader.begin(files=batch.tolist(), 
                           det=None,
-                          reader_kwargs={"overwrite_sampling_rate":2.4*units.GHz, 
+                          reader_kwargs={"overwrite_sampling_rate":2.4, 
                                          "convert_to_voltage":True,
                                          "apply_baseline_correction":"auto",
                                          "mattak_kwargs":{"backend":backend}})
@@ -192,7 +194,7 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
         csr = csr()
         csr.begin(debug=False)
         
-        for idx, event in enumerate(tableReader.reader.run()):
+        for idx, event in enumerate(tqdm(tableReader.reader.run(), total=n_events, desc="Events", unit="evt", leave=False)):
             station = event.get_station()
             time = station.get_station_time().datetime64
             times.append(time)
@@ -247,7 +249,7 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
     #print(f"freqs {freqs}")
     #print(f"trigger types: {np.unique(event_info['triggerType'])}")
 
-def plot_time_integrated_surface_spectra_unnormalized(spec_arr, freqs, upward_channels, downward_channels):
+def plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr, freqs, upward_channels, downward_channels, save_location):
     '''Plot time-integrated surface channel spectra.'''
     plt.figure(figsize=(10, 6))
     for ch in upward_channels:
@@ -256,16 +258,22 @@ def plot_time_integrated_surface_spectra_unnormalized(spec_arr, freqs, upward_ch
     for ch in downward_channels:
         spec_mean = np.mean(spec_arr[ch, :, :], axis=0)
         plt.plot(freqs / units.MHz, spec_mean, label=f'Ch {ch} (down)', linestyle='--')
-    plt.xlabel('Frequency [MHz]')
-    plt.xlim(0, 800)
-    plt.ylabel('Mean Amplitude Spectrum [V/GHz]')
-    plt.title('Time-Integrated Spectrum of Surface Channels')
-    plt.legend()
-    plt.grid()
-    plt.tight_layout()
-    plt.savefig('time_integrated_surface_spectra_unnormalized.png')
 
-def plot_time_integrated_surface_spectra_normalized(norm_spec_arr, freqs, upward_channels, downward_channels):
+    plt.xlabel('Frequency [MHz]')
+    plt.xlim(0, 800)
+    plt.ylabel('Mean Amplitude Spectrum [V/GHz]')
+    plt.title('Time-Integrated Spectrum of Surface Channels')
+    plt.legend(loc="upper right", 
+               frameon=True,
+               fancybox=True,
+               framealpha=0.9,
+               edgecolor="black")
+    plt.grid()
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_location, f"time_integrated_surface_spectra_unnormalized_{station_id}.pdf"))
+
+
+def plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr, freqs, upward_channels, downward_channels, save_location):
     '''Plot time-integrated surface channel spectra.'''
     plt.figure(figsize=(10, 6))
     for ch in upward_channels:
@@ -274,20 +282,62 @@ def plot_time_integrated_surface_spectra_normalized(norm_spec_arr, freqs, upward
     for ch in downward_channels:
         spec_mean = np.mean(norm_spec_arr[ch, :, :], axis=0)
         plt.plot(freqs / units.MHz, spec_mean, label=f'Ch {ch} (down)', linestyle='--')
+
+    periodiccolor2 = "mediumseagreen"
+    excesscolor = 'grey'
+    wb_color = "mediumvioletred"
+    normcolor = "steelblue"
+
+    plt.axvspan(80, 120, color=excesscolor, alpha=0.3, label="_nolegend_")
+    plt.axvline(x=0.402e3, color=wb_color, linestyle='--', linewidth=1.2, label="_nolegend_", alpha=0.7)
+    plt.axvspan(0.278e3, 0.285e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
+    plt.axvspan(0.482e3, 0.485e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
+    plt.axvspan(0.240e3, 0.272e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
+    plt.axvspan(0.358e3, 0.378e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
+    plt.axvspan(0.136e3, 0.139e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
+    plt.axvspan(0.151e3, 0.157e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
+    plt.axvspan(0.125e3, 0.127e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
+    plt.axvspan(500, 650, color=normcolor, alpha=0.3, label="_nolegend_")
+
     plt.xlabel('Frequency [MHz]')
     plt.xlim(0, 800)
     plt.ylabel('Mean Amplitude Spectrum [V/GHz]')
     plt.title('Time-Integrated Spectrum of Surface Channels')
-    plt.legend()
+    
+    ax = plt.gca()
+    line_legend = ax.legend(
+        loc="upper right",
+        frameon=True,
+        fancybox=True,
+        framealpha=0.9,
+        edgecolor="black")
+    
+    annotation_handles = [
+        Patch(facecolor=excesscolor, alpha=0.3, label="Galactic Excess"),
+        Line2D([0], [0], color=wb_color, linestyle="--", linewidth=1.2, label="Weather Balloon"),
+        Patch(facecolor=periodiccolor2, alpha=0.3, label="Periodic Signal"),
+        Patch(facecolor=normcolor, alpha=0.3, label="Normalization Region"),]
+
+    annotation_legend = ax.legend(
+        handles=annotation_handles,
+        loc="lower right",
+        frameon=True,
+        fancybox=True,
+        framealpha=0.9,
+        edgecolor="black")
+
+    ax.add_artist(line_legend)
+
     plt.grid()
     plt.tight_layout()
-    plt.savefig('time_integrated_surface_spectra_normalized.png')
+    plt.savefig(os.path.join(save_location, f"time_integrated_surface_spectra_normalized_{station_id}.pdf"))
 
 if __name__ == "__main__":
 
     argparser = ArgumentParser(description="RNO-G Science Verification Analysis")
     argparser.add_argument("-st", "--station_id", type=int, required=True, help="Station to analyze, e.g --station_id 14")
     argparser.add_argument("-b", "--backend", type=str, default="pyroot", help="Backend to use for reading data, should be either pyroot or uproot (default: pyroot), e.g. --backend pyroot or --backend uproot")
+    argparser.add_argument("-sl", "--save_location", type=str, default=".", help="Location to save the output plots (default: current directory), e.g. --save_location /path/to/save/plots")
     
     run_selection = argparser.add_mutually_exclusive_group(required=True)
     run_selection.add_argument("--runs", nargs="+", type=int, metavar="RUN_NUMBERS",
@@ -315,11 +365,14 @@ if __name__ == "__main__":
         start_time = args.time_range[0]
         stop_time = args.time_range[1]
         runtable = read_rnog_runtable(station_id, start_time, stop_time)
-        run_numbers = runtable['run_number'].tolist()
+        run_numbers = runtable['run'].tolist()
+
+    # Create save location directory if it doesn't exist
+    save_location = os.path.expanduser(args.save_location)
+    os.makedirs(save_location, exist_ok=True)
 
     spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info = read_rnog_data(station_id, run_numbers, backend=backend) 
     norm_spec_arr, scale_factors = normalize_surface_channels_to_down_reference(spec_arr, freqs, downward_channels, upward_channels)
 
-    plot_time_integrated_surface_spectra_unnormalized(spec_arr, freqs, upward_channels, downward_channels)
-    plot_time_integrated_surface_spectra_normalized(norm_spec_arr, freqs, upward_channels, downward_channels)
-
+    plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr, freqs, upward_channels, downward_channels, save_location)
+    plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr, freqs, upward_channels, downward_channels, save_location)
