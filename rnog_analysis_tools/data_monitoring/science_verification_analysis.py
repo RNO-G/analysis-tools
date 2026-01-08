@@ -23,6 +23,11 @@ import matplotlib as mpl
 from collections import defaultdict
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
+from scipy.stats import skew
+import json
+import matplotlib.dates as mdates
+from datetime import timezone
+
 
 '''
 This module can be used to test if the stations are working as expected.
@@ -36,7 +41,7 @@ DOWNWARD_CHANNELS_LIST = [12, 14, 15, 17, 18, 20]
 VPOL_LIST = [0, 1, 2, 3, 5, 6, 7, 9, 10, 22, 23]
 HPOL_LIST = [4, 8, 11, 21]
 PHASED_ARRAY_LIST = [0, 1, 2, 3]
-ALL_CHANNELS_LIST = SURFACE_CHANNELS_LIST + DEEP_CHANNELS_LIST
+ALL_CHANNELS_LIST = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 , 19 , 20, 21, 22, 23]
 
 # Channel mapping for Station 14:
 STATION_14_SURFACE_CHANNELS_LIST = [12, 13, 14, 15, 16, 17, 18 , 19]
@@ -46,7 +51,7 @@ STATION_14_DOWNWARD_CHANNELS_LIST = [12, 14, 17, 19]
 STATION_14_VPOL_LIST = [0, 1, 2, 3, 5, 6, 7, 9, 10, 20, 22, 23]
 STATION_14_HPOL_LIST = [4, 8, 11, 21]
 STATION_14_PHASED_ARRAY_LIST = [0, 1, 2, 3]
-STATION_14_ALL_CHANNELS_LIST = STATION_14_SURFACE_CHANNELS_LIST + STATION_14_DEEP_CHANNELS_LIST
+STATION_14_ALL_CHANNELS_LIST = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 , 19 , 20, 21, 22, 23]
 
 # Matplotlib settings
 
@@ -205,7 +210,7 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
                                          "apply_baseline_correction":"auto",
                                          "mattak_kwargs":{"backend":backend}})
         event_info_tmp = tableReader.reader.get_events_information(
-            keys=["triggerType", "triggerTime", "readoutTime", "radiantThrs", "lowTrigThrs"])
+            keys=["triggerType", "triggerTime", "readoutTime", "radiantThrs", "lowTrigThrs", "run", "eventNumber"])
         
         event_info_tmp = convert_events_information(event_info_tmp, False)
         for key, value in event_info_tmp.items():
@@ -298,7 +303,7 @@ def find_amplitude_ratio_in_band(station_id, freqs, norm_spec_arr, upward_channe
         spectrum_list.append(masked_spec_med)
 
     return ratio_list, spectrum_list
-   
+
 
 def find_amplitude_ratio_in_band_specific_bkg(station_id, freqs, norm_spec_arr, upward_channels, downward_channels):
     '''Find normalized amplitude ratio of upward vs downward channels in specific frequency bands. Backgrouns were defined using wiki page: https://radio.uchicago.edu/wiki/index.php/Features_observed_in_data'''
@@ -324,7 +329,12 @@ def find_amplitude_ratio_in_band_specific_bkg(station_id, freqs, norm_spec_arr, 
     freq_max_485 = 485 * units.MHz
     ratio_arr_482, _ = find_amplitude_ratio_in_band(station_id, freqs, norm_spec_arr, upward_channels, downward_channels, reference_channels_482, freq_min_482, freq_max_485)
 
-    return ratio_arr_gal, ratio_arr_360, ratio_arr_482
+    reference_channels_240 = downward_channels
+    freq_min_240 = 240 * units.MHz
+    freq_max_272 = 272 * units.MHz
+    ratio_arr_240, _ = find_amplitude_ratio_in_band(station_id, freqs, norm_spec_arr, upward_channels, downward_channels, reference_channels_240, freq_min_240, freq_max_272)
+
+    return ratio_arr_gal, ratio_arr_360, ratio_arr_482, ratio_arr_240
 
 def excess_info_from_ratio(ratio_arr, alpha=0.01, freq_range_str=""):
     '''Calculate excess information from amplitude ratios in frequency bands.'''
@@ -347,7 +357,7 @@ def excess_info_from_ratio(ratio_arr, alpha=0.01, freq_range_str=""):
     if pval > alpha:
         validation = "NO EXCESS (sign-test)"
     else:
-        if confidence_interval.low > 0.7:
+        if confidence_interval.low > 0.75:
             validation = "STRONG EXCESS (sign-test)"
         elif confidence_interval.low > 0.55:
             validation = "MODERATE EXCESS (sign-test)"
@@ -362,23 +372,25 @@ def excess_info_from_ratio(ratio_arr, alpha=0.01, freq_range_str=""):
         "validation": validation
     }
 
-def validate_excess_in_bands(ratio_arr_gal, ratio_arr_360, ratio_arr_482, alpha=0.01):
+def validate_excess_in_bands(ratio_arr_gal, ratio_arr_360, ratio_arr_482, ratio_arr_240, alpha=0.01):
     '''Validate excess information from amplitude ratios in frequency bands.'''
     gal_info = excess_info_from_ratio(ratio_arr_gal, alpha, "80–120 MHz")
     freq360_info = excess_info_from_ratio(ratio_arr_360, alpha, "360–380 MHz")
     freq482_info = excess_info_from_ratio(ratio_arr_482, alpha, "482–485 MHz")
-
+    freq240_info = excess_info_from_ratio(ratio_arr_240, alpha, "240–272 MHz")
     return {
         "galactic_excess": gal_info,
         "freq_360_380MHz": freq360_info,
-        "freq_482_485MHz": freq482_info
+        "freq_482_485MHz": freq482_info,
+        "freq_240_272MHz": freq240_info
     }
 
-def debug_plot_ratios(ratio_arr_gal, ratio_arr_360, ratio_arr_482, channels_order, save_location, station_id, run_label, bins=30):
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharey=True)
+def debug_plot_ratios(ratio_arr_gal, ratio_arr_360, ratio_arr_482, ratio_arr_240, channels_order, save_location, station_id, run_label, bins=30):
+    fig, axes = plt.subplots(1, 4, figsize=(20, 5), sharey=True)
     bands = [("80–120 MHz  (FORCE Trigger)", ratio_arr_gal),
              ("360–380 MHz  (FORCE Trigger)", ratio_arr_360),
-             ("482–485 MHz  (FORCE Trigger)", ratio_arr_482),]
+             ("482–485 MHz  (FORCE Trigger)", ratio_arr_482),
+             ("240–272 MHz  (FORCE Trigger)", ratio_arr_240)]
 
     for ax, (title, ratio_list) in zip(axes, bands):
         for ch, r in zip(channels_order, ratio_list):
@@ -438,11 +450,11 @@ def plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr, f
     normcolor = "steelblue"
 
     plt.axvspan(80, 120, color=excesscolor, alpha=0.3, label="_nolegend_")
-    plt.axvline(x=0.402e3, color=wb_color, linestyle='--', linewidth=1.2, label="_nolegend_", alpha=0.7)
+    plt.axvline(x=0.403e3, color=wb_color, linestyle='--', linewidth=1.2, label="_nolegend_", alpha=0.7)
     plt.axvspan(0.278e3, 0.285e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
     plt.axvspan(0.482e3, 0.485e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
     plt.axvspan(0.240e3, 0.272e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
-    plt.axvspan(0.358e3, 0.378e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
+    plt.axvspan(0.360e3, 0.380e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
     plt.axvspan(0.136e3, 0.139e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
     plt.axvspan(0.151e3, 0.157e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
     plt.axvspan(0.125e3, 0.127e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
@@ -504,6 +516,116 @@ def plot_time_integrated_deep_spectra(station_id, spec_arr, freqs, vpol_channels
     plt.tight_layout()
     plt.savefig(os.path.join(save_location, f"time_integrated_deep_spectra_unnormalized_force_trigger_{station_id}_{run_label}.pdf"))
 
+
+def calculate_statistics_log_snr(snr_arr):
+    '''Calculate log10 statistics (mean, median, std, mean-median) for SNR values.'''
+    log_snr_arr = np.zeros((len(snr_arr), len(snr_arr[0])))
+    for ch in range(len(snr_arr)):
+        snr_arr_ch = snr_arr[ch]
+        log_snr_arr_ch = np.log10(snr_arr_ch)
+        log_snr_arr[ch, :] = log_snr_arr_ch
+    log_mean_list = []
+    log_median_list = []
+    log_std_list = []
+    log_difference_list = []
+
+    for ch in range(len(log_snr_arr)):
+        log_mean_list.append(np.mean(log_snr_arr[ch]))
+        log_median_list.append(np.median(log_snr_arr[ch]))
+        log_std_list.append(np.std(log_snr_arr[ch]))
+        log_difference_list.append(np.mean(log_snr_arr[ch]) - np.median(log_snr_arr[ch]))
+
+    return log_snr_arr, log_mean_list, log_median_list, log_std_list, log_difference_list
+
+def calculate_z_score_snr(snr_arr, mean_list, std_list, channel_list):
+    '''Calculate the z-score for SNR values given mean and standard deviation lists for each channel.'''
+    z_score_arr = np.zeros((len(snr_arr), len(snr_arr[0])))
+    for ch in channel_list:
+        snr_arr_ch = snr_arr[ch]
+        mean_ch = mean_list[ch]
+        std_ch = std_list[ch]
+        z_score_arr_ch = (snr_arr_ch - mean_ch) / std_ch
+        z_score_arr[ch,:] = z_score_arr_ch
+
+    return z_score_arr
+
+def symmetry_metrics_channel_z_score(z_score):
+    return {
+        "mean": np.mean(z_score),
+        "median": np.median(z_score),
+        "skew": skew(z_score, bias=False),
+        "p_pos_3": np.mean(z_score > 3),
+        "p_neg_3": np.mean(z_score < -3),
+        "p_pos_5": np.mean(z_score > 5),
+        "p_neg_5": np.mean(z_score < -5),
+    }
+def symmetry_metrics_z_score(z_score):
+    metrics = {}
+    for ch in range(len(z_score)):
+        z_score_ch = z_score[ch]
+        metrics[f"ch_{ch}"] = symmetry_metrics_channel_z_score(z_score_ch)
+    return metrics
+
+def load_k_values_json(filepath):
+    ''' Load k-values from a JSON file.'''
+    with open(filepath, "r") as f:
+        data = json.load(f)     
+    k_values = {int(ch): float(k) for ch, k in data.items()}
+
+    return k_values
+
+def outlier_flag(z_score_log, k_values_log, channel_list):
+    '''Flag outlier events based on the k-values for each channel.'''
+    flag = np.zeros((len(channel_list), len(z_score_log[0])), dtype=bool)
+    for ch in channel_list:
+        flag[ch, :] = np.abs(z_score_log[ch]) > k_values_log[ch]
+
+    return flag
+
+def find_outlier_details(z_score_log, k_values_log, flag, event_info, channel_list):
+    '''Find details of outlier events for each channel.'''
+    outlier_details = {}
+
+    for ch in channel_list:
+        outlier_indices = np.where(flag[ch, :])[0]
+        details_ch = []
+        for idx in outlier_indices:
+            z_abs = np.abs(z_score_log[ch, idx])
+            k_ch = k_values_log[ch]
+            delta = z_abs - k_ch
+
+            details_ch.append({
+                "run": int(event_info["run"][idx]),
+                "eventNumber": int(event_info["eventNumber"][idx]),
+                "z_abs": float(z_abs),
+                "k": float(k_ch),
+                "z_minus_k": float(delta),
+            })
+
+        outlier_details[ch] = details_ch
+
+    return outlier_details
+
+
+def print_outlier_summary(outlier_details):
+    '''Print a summary of outlier events for each channel.'''
+    for ch in sorted(outlier_details.keys()):
+        entries = outlier_details[ch]
+        n_outliers = len(entries)
+
+        if n_outliers == 0:
+            print(f"Channel {ch}: 0 outliers")
+            continue
+
+        k_ch = entries[0]["k"]
+        print(f"Channel {ch}: {n_outliers} outliers (k = {k_ch:.2f})")
+
+        for e in entries:
+            print(f"  - run {e['run']}, event {e['eventNumber']}, "
+                  f"|z| = {e['z_abs']:.2f} (delta = {e['z_minus_k']:.2f} above k)")
+
+
+
 if __name__ == "__main__":
 
     argparser = ArgumentParser(description="RNO-G Science Verification Analysis")
@@ -561,12 +683,18 @@ if __name__ == "__main__":
     save_location = os.path.expanduser(args.save_location)
     os.makedirs(save_location, exist_ok=True)
 
+    # Read data
     spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info = read_rnog_data(station_id, run_numbers, backend=backend) 
+
+    # Normalize surface channel spectra
     norm_spec_arr, scale_factors = normalize_channels(spec_arr, freqs, downward_channels, upward_channels)
     print(f"Event info trigger type: {event_info['triggerType']}, event info trigger type length: {len(event_info['triggerType'])}")
     print(f"Spec arr shape: {spec_arr.shape}, Norm spec arr shape: {norm_spec_arr.shape}")
 
+    # Select FORCE trigger events
     force_mask = choose_trigger_type(event_info, "FORCE")
+
+    # Spectral analysis for FORCE trigger events only
     spec_arr_force = spec_arr[:, force_mask, :]
     norm_spec_arr_force = norm_spec_arr[:, force_mask, :]
     print(f"Number of FORCE trigger events: {spec_arr_force.shape[1]}")
@@ -574,7 +702,7 @@ if __name__ == "__main__":
     if len(spec_arr_force[1]) < 30:
         print("!!!! Warning: Less than 30 FORCE-trigger events, results of the sign test may not be reliable. !!!!")
 
-    ratio_arr_gal, ratio_arr_360, ratio_arr_482 = find_amplitude_ratio_in_band_specific_bkg(station_id, freqs, norm_spec_arr_force, upward_channels, downward_channels)
+    ratio_arr_gal, ratio_arr_360, ratio_arr_482, ratio_arr_240 = find_amplitude_ratio_in_band_specific_bkg(station_id, freqs, norm_spec_arr_force, upward_channels, downward_channels)
     channels_order = upward_channels + downward_channels
     ch_to_idx = {ch: i for i, ch in enumerate(channels_order)}
     print(ch_to_idx)
@@ -588,6 +716,7 @@ if __name__ == "__main__":
             ratio_arr_gal[i],
             ratio_arr_360[i],
             ratio_arr_482[i],
+            ratio_arr_240[i],
             alpha=0.01
         )
 
@@ -600,5 +729,20 @@ if __name__ == "__main__":
     plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_force, freqs, upward_channels, downward_channels, save_location, run_label)
     plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr_force, freqs, upward_channels, downward_channels, save_location, run_label)
 
+    # SNR analysis
+    snr_arr_force = snr_arr[:, force_mask]
+    event_info_force = {key: np.array(value)[force_mask] for key, value in event_info.items()}
+
+    log_snr_arr, log_mean_list, log_median_list, log_std_list, log_difference_list = calculate_statistics_log_snr(snr_arr_force)
+
+    z_score_arr_log_snr = calculate_z_score_snr(log_snr_arr, log_mean_list, log_std_list, all_channels)
+    k_values_filename_snr = f"station_{station_id}_k_ref_values_snr.json"
+    k_values_log_snr = load_k_values_json(k_values_filename_snr)
+    flag_outliers_snr = outlier_flag(z_score_arr_log_snr, k_values_log_snr, all_channels)
+
+    outlier_details_snr = find_outlier_details(z_score_arr_log_snr, k_values_log_snr, flag_outliers_snr, event_info_force, all_channels)
+    print_outlier_summary(outlier_details_snr)
+
+
     if args.debug_plot:   
-        debug_plot_ratios(ratio_arr_gal, ratio_arr_360, ratio_arr_482, channels_order=channels_order, save_location=save_location, station_id=station_id, run_label=run_label, bins=30,)
+        debug_plot_ratios(ratio_arr_gal, ratio_arr_360, ratio_arr_482, ratio_arr_240, channels_order=channels_order, save_location=save_location, station_id=station_id, run_label=run_label, bins=30,)
