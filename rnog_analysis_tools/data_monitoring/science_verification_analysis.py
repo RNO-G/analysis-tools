@@ -50,17 +50,20 @@ STATION_14_ALL_CHANNELS_LIST = STATION_14_SURFACE_CHANNELS_LIST + STATION_14_DEE
 
 # Matplotlib settings
 
-CALM_DISTINCT = [
-    "#4477AA",  # blue
-    "#66CCEE",  # cyan
-    "#228833",  # green
-    "#CCBB44",  # olive/yellow
-    "#EE6677",  # soft red
-    "#AA3377",  # purple
-    "#BBBBBB",  # gray
-    "#332288",  # deep indigo
+COLORS = [
+    "#1F77B4",  # blue
+    "#FF4B4B",  # bright red
+    "#2CA02C",  # green
+    "#9467BD",  # purple
+    "#17BECF",  # cyan
+    "#D62728",  # deep red
+    "#8C564B",  # warm brown
+    "#1FA187",  # teal-green
+    "#4E79A7",  # steel blue
+    "#F76E5C",  # coral
+    "#A55194",  # magenta-purple
+    "#3D4ED7",  # indigo
 ]
-
 
 mpl.rcParams.update({
     'font.family': 'sans-serif',
@@ -72,7 +75,7 @@ mpl.rcParams.update({
     'axes.linewidth': 1.2,
     'axes.grid': False,
 
-    'axes.prop_cycle': cycler('color', CALM_DISTINCT),
+    'axes.prop_cycle': cycler('color', COLORS),
 
     'xtick.labelsize': 17,
     'ytick.labelsize': 17,
@@ -113,6 +116,12 @@ def convert_events_information(event_info, convert_to_arrays=True):
 
     return data
 
+def choose_trigger_type(event_info, trigger_type: str):
+    '''Choose events based on trigger type.'''
+    mask = event_info["triggerType"] == trigger_type
+
+    return mask
+    
 # Find the correct channel mapping for a given station
 def station_channels(station_id: int):
     if station_id == 14:
@@ -317,7 +326,7 @@ def find_amplitude_ratio_in_band_specific_bkg(station_id, freqs, norm_spec_arr, 
 
     return ratio_arr_gal, ratio_arr_360, ratio_arr_482
 
-def excess_info_from_ratio(ratio_arr, alpha=0.01):
+def excess_info_from_ratio(ratio_arr, alpha=0.01, freq_range_str=""):
     '''Calculate excess information from amplitude ratios in frequency bands.'''
     from scipy.stats import binomtest
 
@@ -328,13 +337,22 @@ def excess_info_from_ratio(ratio_arr, alpha=0.01):
 
     k = np.sum(log_ratio > 0)
     n = int(log_ratio.size)
-    pval = binomtest(k, n, p=0.5, alternative="greater").pvalue
-    print(f"Binomial test: k={k}, n={n}, pval={pval:.3e}")
+    result = binomtest(k, n, p=0.5, alternative="greater")
+    pval = result.pvalue
+    statistic = result.statistic
+    confidence_interval = result.proportion_ci(confidence_level=0.95)
 
-    if pval < alpha:
-        validation = "EXCESS (sign-test)"
-    else:
+    print(f"Binomial test for frequency range {freq_range_str}: k={k}, n={n}, pval={pval:.3e}, statistic={statistic:.3f}, 95% CI={confidence_interval}")
+
+    if pval > alpha:
         validation = "NO EXCESS (sign-test)"
+    else:
+        if confidence_interval.low > 0.7:
+            validation = "STRONG EXCESS (sign-test)"
+        elif confidence_interval.low > 0.55:
+            validation = "MODERATE EXCESS (sign-test)"
+        else: 
+            validation = "WEAK EXCESS (sign-test)"       
 
     return {
         "median_log_ratio": median_log_ratio,
@@ -346,9 +364,9 @@ def excess_info_from_ratio(ratio_arr, alpha=0.01):
 
 def validate_excess_in_bands(ratio_arr_gal, ratio_arr_360, ratio_arr_482, alpha=0.01):
     '''Validate excess information from amplitude ratios in frequency bands.'''
-    gal_info = excess_info_from_ratio(ratio_arr_gal, alpha)
-    freq360_info = excess_info_from_ratio(ratio_arr_360, alpha)
-    freq482_info = excess_info_from_ratio(ratio_arr_482, alpha)
+    gal_info = excess_info_from_ratio(ratio_arr_gal, alpha, "80–120 MHz")
+    freq360_info = excess_info_from_ratio(ratio_arr_360, alpha, "360–380 MHz")
+    freq482_info = excess_info_from_ratio(ratio_arr_482, alpha, "482–485 MHz")
 
     return {
         "galactic_excess": gal_info,
@@ -358,9 +376,9 @@ def validate_excess_in_bands(ratio_arr_gal, ratio_arr_360, ratio_arr_482, alpha=
 
 def debug_plot_ratios(ratio_arr_gal, ratio_arr_360, ratio_arr_482, channels_order, save_location, station_id, run_label, bins=30):
     fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharey=True)
-    bands = [("Galactic Excess (80–120 MHz)", ratio_arr_gal),
-             ("360–380 MHz", ratio_arr_360),
-             ("482–485 MHz", ratio_arr_482),]
+    bands = [("80–120 MHz  (FORCE Trigger)", ratio_arr_gal),
+             ("360–380 MHz  (FORCE Trigger)", ratio_arr_360),
+             ("482–485 MHz  (FORCE Trigger)", ratio_arr_482),]
 
     for ax, (title, ratio_list) in zip(axes, bands):
         for ch, r in zip(channels_order, ratio_list):
@@ -368,7 +386,7 @@ def debug_plot_ratios(ratio_arr_gal, ratio_arr_360, ratio_arr_482, channels_orde
             ax.hist(np.log10(r), bins=bins, histtype="step", linewidth=1.3, label=f"Ch {ch}", alpha=0.8)
 
         ax.set_title(title)
-        ax.set_xlabel("log10 Amplitude Ratio")
+        ax.set_xlabel("log10(R)")
         ax.grid(True, alpha=0.3)
 
     axes[0].set_ylabel("Counts")
@@ -376,7 +394,7 @@ def debug_plot_ratios(ratio_arr_gal, ratio_arr_360, ratio_arr_482, channels_orde
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper right", ncol=8, frameon=True)
     plt.tight_layout()
-    fig.savefig(os.path.join(save_location,f"debug_amplitude_ratios_{station_id}_{run_label}.pdf",))
+    fig.savefig(os.path.join(save_location,f"debug_amplitude_ratios_force_trigger_{station_id}_{run_label}.pdf",))
     plt.close(fig)
 
 
@@ -393,7 +411,7 @@ def plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr, freq
     plt.xlabel('Frequency [MHz]')
     plt.xlim(0, 800)
     plt.ylabel('Amplitude Spectrum [V/GHz]')
-    plt.title('Time-Integrated Spectrum of Surface Channels')
+    plt.title('Time-Integrated Spectrum of Surface Channels  (FORCE Trigger)')
     plt.legend(loc="upper right", 
                frameon=True,
                fancybox=True,
@@ -401,7 +419,7 @@ def plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr, freq
                edgecolor="black")
     plt.grid()
     plt.tight_layout()
-    plt.savefig(os.path.join(save_location, f"time_integrated_surface_spectra_unnormalized_{station_id}_{run_label}.pdf"))
+    plt.savefig(os.path.join(save_location, f"time_integrated_surface_spectra_unnormalized_force_trigger_{station_id}_{run_label}.pdf"))
 
 
 def plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr, freqs, upward_channels, downward_channels, save_location, run_label):
@@ -433,7 +451,7 @@ def plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr, f
     plt.xlabel('Frequency [MHz]')
     plt.xlim(0, 800)
     plt.ylabel('Amplitude Spectrum [V/GHz]')
-    plt.title('Time-Integrated Spectrum of Surface Channels')
+    plt.title('Time-Integrated Spectrum of Surface Channels (FORCE Trigger)')
     
     ax = plt.gca()
     line_legend = ax.legend(
@@ -461,7 +479,7 @@ def plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr, f
 
     plt.grid()
     plt.tight_layout()
-    plt.savefig(os.path.join(save_location, f"time_integrated_surface_spectra_normalized_{station_id}_{run_label}.pdf"))
+    plt.savefig(os.path.join(save_location, f"time_integrated_surface_spectra_normalized_force_trigger_{station_id}_{run_label}.pdf"))
 
 def plot_time_integrated_deep_spectra(station_id, spec_arr, freqs, vpol_channels, hpol_channels, save_location, run_label):
     '''Plot time-integrated deep channel spectra.'''
@@ -484,7 +502,7 @@ def plot_time_integrated_deep_spectra(station_id, spec_arr, freqs, vpol_channels
                edgecolor="black")
     plt.grid()
     plt.tight_layout()
-    plt.savefig(os.path.join(save_location, f"time_integrated_deep_spectra_unnormalized_{station_id}_{run_label}.pdf"))
+    plt.savefig(os.path.join(save_location, f"time_integrated_deep_spectra_unnormalized_force_trigger_{station_id}_{run_label}.pdf"))
 
 if __name__ == "__main__":
 
@@ -545,8 +563,18 @@ if __name__ == "__main__":
 
     spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info = read_rnog_data(station_id, run_numbers, backend=backend) 
     norm_spec_arr, scale_factors = normalize_channels(spec_arr, freqs, downward_channels, upward_channels)
+    print(f"Event info trigger type: {event_info['triggerType']}, event info trigger type length: {len(event_info['triggerType'])}")
+    print(f"Spec arr shape: {spec_arr.shape}, Norm spec arr shape: {norm_spec_arr.shape}")
 
-    ratio_arr_gal, ratio_arr_360, ratio_arr_482 = find_amplitude_ratio_in_band_specific_bkg(station_id, freqs, norm_spec_arr, upward_channels, downward_channels)
+    force_mask = choose_trigger_type(event_info, "FORCE")
+    spec_arr_force = spec_arr[:, force_mask, :]
+    norm_spec_arr_force = norm_spec_arr[:, force_mask, :]
+    print(f"Number of FORCE trigger events: {spec_arr_force.shape[1]}")
+
+    if len(spec_arr_force[1]) < 30:
+        print("!!!! Warning: Less than 30 FORCE-trigger events, results of the sign test may not be reliable. !!!!")
+
+    ratio_arr_gal, ratio_arr_360, ratio_arr_482 = find_amplitude_ratio_in_band_specific_bkg(station_id, freqs, norm_spec_arr_force, upward_channels, downward_channels)
     channels_order = upward_channels + downward_channels
     ch_to_idx = {ch: i for i, ch in enumerate(channels_order)}
     print(ch_to_idx)
@@ -568,9 +596,9 @@ if __name__ == "__main__":
             for key, value in results.items():
                 print(f"{key}: {value}")
             print("==============")
-    
-    plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr, freqs, upward_channels, downward_channels, save_location, run_label)
-    plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr, freqs, upward_channels, downward_channels, save_location, run_label)
+
+    plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_force, freqs, upward_channels, downward_channels, save_location, run_label)
+    plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr_force, freqs, upward_channels, downward_channels, save_location, run_label)
 
     if args.debug_plot:   
         debug_plot_ratios(ratio_arr_gal, ratio_arr_360, ratio_arr_482, channels_order=channels_order, save_location=save_location, station_id=station_id, run_label=run_label, bins=30,)
