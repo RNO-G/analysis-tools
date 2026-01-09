@@ -27,6 +27,9 @@ from scipy.stats import skew
 import json
 import matplotlib.dates as mdates
 from datetime import timezone
+from scipy.stats import gaussian_kde, skew
+from scipy.signal import find_peaks
+
 
 
 '''
@@ -53,21 +56,39 @@ STATION_14_HPOL_LIST = [4, 8, 11, 21]
 STATION_14_PHASED_ARRAY_LIST = [0, 1, 2, 3]
 STATION_14_ALL_CHANNELS_LIST = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 , 19 , 20, 21, 22, 23]
 
+# Script directory
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # Matplotlib settings
 
 COLORS = [
-    "#1F77B4",  # blue
-    "#FF4B4B",  # bright red
-    "#2CA02C",  # green
-    "#9467BD",  # purple
-    "#17BECF",  # cyan
-    "#D62728",  # deep red
-    "#8C564B",  # warm brown
-    "#1FA187",  # teal-green
-    "#4E79A7",  # steel blue
-    "#F76E5C",  # coral
-    "#A55194",  # magenta-purple
-    "#3D4ED7",  # indigo
+    "#4477AA",  # strong blue
+    "#EE6677",  # coral / red
+    "#228833",  # green
+    "#CCBB44",  # yellow
+    "#66CCEE",  # light blue
+    "#AA3377",  # purple
+
+    "#882255",  # wine
+    "#44AA99",  # teal
+    "#084C1F",  # deep green
+    "#332288",  # indigo
+    "#AA4499",  # magenta
+    "#771122",  # burgundy
+
+    "#7089A1",  # steel blue
+    "#DDCC77",  # sand
+    "#B0D8EC",  # pale blue
+    "#CC6677",  # dusty red
+    "#999933",  # olive
+    "#DCB43C",  # warm yellow
+
+    "#006699",  # dark cyan
+    "#0099CC",  # vivid cyan
+    "#9955AA",  # lavender purple
+    "#55AA55",  # bright green
+    "#CC7711",  # warm orange
+    "#555555",  # neutral gray
 ]
 
 mpl.rcParams.update({
@@ -218,6 +239,7 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
 
         n_events = tableReader.reader.get_n_events()
         n_events_total += n_events
+        print(f"Reading {n_events} events in this batch.")
 
         channel_list = [i for i in range(24)]  
         spec_arr = np.zeros((len(channel_list), n_events, 1025))
@@ -277,12 +299,13 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
     event_info["triggerTime"][inf_mask] = event_info["readoutTime"][inf_mask]
     print(f"Found {np.sum(inf_mask)} events with inf trigger time (of {len(inf_mask)} events)")
 
+    print(f"n_events read: {spec_arr.shape[1]}, n_events_total: {n_events_total}")
+    print(f"freqs shape: {freqs.shape}, spec_arr shape: {spec_arr.shape}, trace_arr shape: {trace_arr.shape}, times_trace_arr shape: {times_trace_arr.shape}, snr_arr shape: {snr_arr.shape}, times shape: {times.shape}, run_no shape: {run_no.shape}  ")
+    print(f"trigger types: {np.unique(event_info['triggerType'])}")
+
     return spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info
 
-    #print(f"n_events read: {spec_arr.shape[1]}, n_events_total: {n_events_total}")
-    #print(f"freqs shape: {freqs.shape}, spec_arr shape: {spec_arr.shape}, trace_arr shape: {trace_arr.shape}, times_trace_arr shape: {times_trace_arr.shape}, snr_arr shape: {snr_arr.shape}")
-    #print(f"freqs {freqs}")
-    #print(f"trigger types: {np.unique(event_info['triggerType'])}")
+    
 
 def find_amplitude_ratio_in_band(station_id, freqs, norm_spec_arr, upward_channels, downward_channels, reference_channels, freq_min, freq_max):
     '''Find normalized amplitude ratio of upward vs downward channels in a given frequency band. This will be replaced by lab measurements in the future.'''
@@ -566,8 +589,12 @@ def symmetry_metrics_z_score(z_score):
         metrics[f"ch_{ch}"] = symmetry_metrics_channel_z_score(z_score_ch)
     return metrics
 
-def load_k_values_json(filepath):
+def load_k_values_json(filename):
     ''' Load k-values from a JSON file.'''
+    if not os.path.isabs(filename):
+        filepath = os.path.join(SCRIPT_DIR, filename)
+    else:
+        filepath = filename
     with open(filepath, "r") as f:
         data = json.load(f)     
     k_values = {int(ch): float(k) for ch, k in data.items()}
@@ -606,6 +633,93 @@ def find_outlier_details(z_score_log, k_values_log, flag, event_info, channel_li
 
     return outlier_details
 
+def calculate_vrms(trace_arr, channel_list, event_info):
+    '''Calculate Vrms for each channel and event according to trigger types.'''
+    vrms_arr = np.std(trace_arr, axis=2)  # (n_channels, n_events)
+
+    force_mask = event_info["triggerType"] == "FORCE"
+    radiant0_mask = event_info["triggerType"] == "RADIANT0"
+    radiant1_mask = event_info["triggerType"] == "RADIANT1"
+    lt_mask = event_info["triggerType"] == "LT"
+
+    vrms_arr_force = vrms_arr[:, force_mask]
+    vrms_arr_radiant0 = vrms_arr[:, radiant0_mask]
+    vrms_arr_radiant1 = vrms_arr[:, radiant1_mask]
+    vrms_arr_lt = vrms_arr[:, lt_mask]
+
+    return vrms_arr, vrms_arr_force, vrms_arr_radiant0, vrms_arr_radiant1, vrms_arr_lt
+
+def kde_modality(vrms_arr, channel_list, bandwidth=None, grid_points = 512, peak_prominence=0.01):
+    '''Calculate KDE and modality for Vrms distributions.'''
+
+    modality_dict = {}
+
+    for ch in channel_list:
+        vrms_ch = vrms_arr[ch]
+        vrms_ch = vrms_ch[~np.isnan(vrms_ch)]
+
+        kde = gaussian_kde(vrms_ch, bw_method=bandwidth)
+        vrms_min = np.min(vrms_ch)
+        vrms_max = np.max(vrms_ch)
+        vrms_grid = np.linspace(vrms_min, vrms_max, grid_points)
+        kde_values = kde(vrms_grid)
+
+        # Adjust prominence to be relative to the KDE range
+        abs_prom = peak_prominence * (np.max(kde_values) - np.min(kde_values))
+
+        peaks, properties = find_peaks(kde_values, prominence=abs_prom)
+
+        modality_dict[ch] = {
+            "kde": kde,
+            "vrms_grid": vrms_grid,
+            "kde_values": kde_values,
+            "n_peaks": len(peaks),
+            "peaks": peaks,
+            "prominences": properties["prominences"],
+        }
+
+    return modality_dict
+
+def tail_fraction_and_trimmed_skew_two_sided(vrms_arr, channel_list, lower_percentile=25, upper_percentile=75, extreme_k=3):
+    '''Calculate tail fraction and two-sided trimmed skewness for Vrms distributions.'''
+    tail_dict = {}
+
+    for ch in channel_list:
+        vrms_ch = vrms_arr[ch]
+        vrms_ch = vrms_ch[~np.isnan(vrms_ch)]
+        n_events = len(vrms_ch)
+
+        full_skew = skew(vrms_ch, bias=False)
+
+        q1, q3 = np.percentile(vrms_ch, [lower_percentile, upper_percentile])
+        iqr = q3 - q1
+
+        lower_bound = q1 - extreme_k * iqr
+        upper_bound = q3 + extreme_k * iqr
+
+        high_mask = vrms_ch > upper_bound
+        high_frac = np.mean(high_mask)
+
+        low_mask = vrms_ch < lower_bound
+        low_frac = np.mean(low_mask)
+
+        core_high = vrms_ch[~high_mask]
+        skew_trim_high = skew(core_high, bias=False) if len(core_high) > 10 else np.nan
+
+        core_low = vrms_ch[~low_mask]
+        skew_trim_low = skew(core_low, bias=False) if len(core_low) > 10 else np.nan
+
+        tail_dict[ch] = {
+            "n_events": n_events,
+            "full_skew": full_skew,
+            "high_tail_fraction": high_frac,
+            "low_tail_fraction": low_frac,
+            "trimmed_skew_high": skew_trim_high,
+            "trimmed_skew_low": skew_trim_low,
+        }
+
+    return tail_dict
+
 
 def print_outlier_summary(outlier_details):
     '''Print a summary of outlier events for each channel.'''
@@ -623,7 +737,115 @@ def print_outlier_summary(outlier_details):
         for e in entries:
             print(f"  - run {e['run']}, event {e['eventNumber']}, "
                   f"|z| = {e['z_abs']:.2f} (delta = {e['z_minus_k']:.2f} above k)")
+            
+def choose_day_interval(times):
+    times = pd.to_datetime(times, utc=True)
+    total_days = (times.max() - times.min()).days
 
+    if total_days < 10:
+        return 1
+    elif total_days < 20:
+        return 2
+    elif total_days < 40:
+        return 4
+    elif total_days < 80:
+        return 7
+    elif total_days < 150:
+        return 10
+    elif total_days < 300:
+        return 15
+    elif total_days < 600:
+        return 30
+    else:
+        return 60
+
+def plot_snr_against_time(station_id,times,snr_arr,flag,z_log,k_list,channels,nrows=12,ncols=2,day_interval=None):
+    times = pd.to_datetime(times,utc=True)
+    channels = list(channels)
+    n_channels = len(channels)
+
+    if day_interval is None:
+        day_interval = choose_day_interval(times) 
+
+    fig, axs = plt.subplots(nrows,ncols,figsize=(15,24),sharex=True)
+    axs = np.array(axs)
+
+    for idx, ch in enumerate(channels):
+        r = idx//ncols
+        c = idx%ncols
+        ax = axs[r,c]
+        good_mask = ~flag[ch]
+        ax.scatter(times[good_mask], np.log10(snr_arr[ch][good_mask]), s=8,alpha=0.25, color="gray")
+        zex = np.abs(z_log[ch]) - k_list[ch]
+        zex = np.clip(zex,0,None)
+        sc = ax.scatter(times[flag[ch]], np.log10(snr_arr[ch][flag[ch]]), s=8,c=zex[flag[ch]], cmap="Reds")
+        cax = ax.inset_axes([1.02,0.1,0.05,0.8])
+        plt.colorbar(sc,cax=cax)
+        ax.grid(alpha=0.4)
+        ax.text(0.85, 0.95, f"Ch {ch}", transform = ax.transAxes, ha = "left",va = "top", bbox = dict(boxstyle = "round, pad = 0.25", facecolor = "white", alpha = 0.8))
+    
+    for idx in range(n_channels, nrows*ncols):
+        r = idx//ncols
+        c = idx%ncols
+        axs[r, c].set_visible(False)
+
+    red = plt.cm.Reds(0.6)
+    legend_handles = [Line2D([0],[0],marker="o",color="none",markeredgecolor="gray",markerfacecolor="gray",markersize=6,label=r"$|z|\leq k$"),
+                    Line2D([0],[0],marker="o",color="none",markeredgecolor=red,markerfacecolor=red,markersize=6,label=r"$|z|>k$")]                 
+    axs[0, 0].legend(handles = legend_handles, loc = "upper left")
+
+    ticks_ax = axs[-1,0]
+    time_span = (times.max() - times.min()).total_seconds() / 86400.0  # in days
+
+    if time_span < 3:
+        # Use hourly ticks if less than 3 days
+        ticks_ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
+        ticks_ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d\n%H:%M", tz=timezone.utc))
+    else:
+        # Use day ticks otherwise
+        ticks_ax.xaxis.set_major_locator(mdates.DayLocator(interval = day_interval))
+        ticks_ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d", tz = timezone.utc))
+
+    fig.autofmt_xdate()
+
+    plt.subplots_adjust(bottom = 0.11, wspace = 0.38, left=0.08)
+    fig.supxlabel("Date [UTC]", x = 0.5, y = 0.06)
+    fig.supylabel(r"$\log_{10}(\mathrm{SNR})$", x = 0.02)
+    plt.savefig(os.path.join(save_location,f"snr_against_time_{station_id}_{run_label}.pdf"))
+
+def debug_plot_snr_distribution(log_snr_arr, channel_list, save_location, station_id, run_label, bins=30):
+    fig, ax = plt.subplots(figsize=(10, 6))
+    for ch in channel_list:
+        log_snr_ch = log_snr_arr[ch]
+        ax.hist(log_snr_ch, bins=bins, histtype="step", linewidth=1.3, label=f"Ch {ch}", alpha=0.8)
+
+    ax.set_title("Log10 SNR Distribution (FORCE Trigger)")
+    ax.set_xlabel("log10(SNR)")
+    ax.set_ylabel("Counts")
+    ax.grid(True, alpha=0.3)
+
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper right", ncol=8, frameon=True)
+    plt.tight_layout()
+    fig.savefig(os.path.join(save_location,f"debug_snr_distribution_force_trigger_{station_id}_{run_label}.pdf",))
+    plt.close(fig)
+
+def debug_plot_z_score_snr(z_score_arr, channel_list, save_location, station_id, run_label, bins=30):
+    fig, ax = plt.subplots(figsize=(10, 6))
+    for ch in channel_list:
+        z_score_ch = z_score_arr[ch]
+        ax.hist(z_score_ch, bins=bins, histtype="step", linewidth=1.3, label=f"Ch {ch}", alpha=0.8)
+
+    ax.set_title("Z-Score SNR Distribution (FORCE Trigger)")
+    ax.set_xlabel("Z-Score(SNR)")
+    ax.set_ylabel("Counts")
+    ax.grid(True, alpha=0.3)
+
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper right", ncol=8, frameon=True)
+    plt.tight_layout()
+    fig.savefig(os.path.join(save_location,f"debug_z_score_snr_force_trigger_{station_id}_{run_label}.pdf",))
+    plt.close(fig)
 
 
 if __name__ == "__main__":
@@ -726,12 +948,18 @@ if __name__ == "__main__":
                 print(f"{key}: {value}")
             print("==============")
 
+    # Surface spectrum
     plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_force, freqs, upward_channels, downward_channels, save_location, run_label)
     plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr_force, freqs, upward_channels, downward_channels, save_location, run_label)
+
+    # Deep spectrum (unnormalized)
+    plot_time_integrated_deep_spectra(station_id, spec_arr_force, freqs, vpol_channels, hpol_channels, save_location, run_label)
 
     # SNR analysis
     snr_arr_force = snr_arr[:, force_mask]
     event_info_force = {key: np.array(value)[force_mask] for key, value in event_info.items()}
+    times = np.array(times)
+    times_force = times[force_mask]
 
     log_snr_arr, log_mean_list, log_median_list, log_std_list, log_difference_list = calculate_statistics_log_snr(snr_arr_force)
 
@@ -743,6 +971,11 @@ if __name__ == "__main__":
     outlier_details_snr = find_outlier_details(z_score_arr_log_snr, k_values_log_snr, flag_outliers_snr, event_info_force, all_channels)
     print_outlier_summary(outlier_details_snr)
 
+    day_interval = choose_day_interval(times)
+    plot_snr_against_time(station_id, times_force, snr_arr_force, flag_outliers_snr, z_score_arr_log_snr, k_values_log_snr, all_channels, nrows=12, ncols=2, day_interval=day_interval)
+
 
     if args.debug_plot:   
         debug_plot_ratios(ratio_arr_gal, ratio_arr_360, ratio_arr_482, ratio_arr_240, channels_order=channels_order, save_location=save_location, station_id=station_id, run_label=run_label, bins=30,)
+        debug_plot_snr_distribution(log_snr_arr, channel_list=all_channels, save_location=save_location, station_id=station_id, run_label=run_label, bins=30)
+        debug_plot_z_score_snr(z_score_arr_log_snr, channel_list=all_channels, save_location=save_location, station_id=station_id, run_label=run_label, bins=30)
