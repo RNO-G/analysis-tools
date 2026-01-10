@@ -100,17 +100,17 @@ def find_k_value(z_score_log, channel_list, quantile=0.999):
         k_ch_list[ch] = k_ch
     return k_ch_list
 
-def save_k_values_json(k_values_log, station_id, filename):
-    '''Save the k-values as a JSON file.'''
+def save_values_json(values_log, filename):
+    '''Save the reference values as a JSON file.'''
     if not os.path.isabs(filename):
         filepath = os.path.join(SCRIPT_DIR, filename)
     else:
         filepath = filename
 
-    with open(filename, "w") as f:
-        json.dump(k_values_log, f, indent=4)
+    with open(filepath, "w") as f:
+        json.dump(values_log, f, indent=4)
 
-    print(f"K-values saved to {filename}")
+    print(f"Values saved to {filepath}")
 
 
 if __name__ == "__main__":
@@ -120,8 +120,7 @@ if __name__ == "__main__":
     argparser.add_argument("-b", "--backend", type=str, default="pyroot", help="Backend to use for reading data, should be either pyroot or uproot (default: pyroot), e.g. --backend pyroot or --backend uproot")
     argparser.add_argument("-sl", "--save_location", type=str, default=".", help="Location to save the output plots (default: current directory), e.g. --save_location /path/to/save/plots")
     argparser.add_argument("-ex", "--exclude-runs", nargs="+", type=int, default=[], metavar="RUN", help="Run number(s) to exclude, e.g. --exclude-runs 1005 1010")
-    argparser.add_argument("--debug_plot", action="store_true", help="If set, will create debug plots.")
-    argparser.add_argument("--save_k_values", action="store_true", help="If set, will save the k-values to a JSON file.")
+    argparser.add_argument("--save_values", action="store_true", help="If set, will save the reference values to separate JSON files.")
 
     run_selection = argparser.add_mutually_exclusive_group(required=True)
     run_selection.add_argument("--runs", nargs="+", type=int, metavar="RUN_NUMBERS",
@@ -186,8 +185,11 @@ if __name__ == "__main__":
     k_values_log_snr = find_k_value(z_score_arr_log_snr, all_channels, quantile=0.999)
 
     k_values_filename_snr = f"station_{station_id}_k_ref_values_snr.json"
-    if args.save_k_values:
-        save_k_values_json(k_values_log_snr, station_id, k_values_filename_snr)
+
+    if args.save_values:
+        save_values_json(k_values_log_snr, k_values_filename_snr)
+        save_values_json(log_mean_list, f"station_{station_id}_ref_log_mean_snr.json")
+        save_values_json(log_std_list, f"station_{station_id}_ref_log_std_snr.json")
 
     flag_outliers_snr = outlier_flag(z_score_arr_log_snr, k_values_log_snr, all_channels)
 

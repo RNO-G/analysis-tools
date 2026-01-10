@@ -9,7 +9,6 @@ from matplotlib import pyplot as plt
 from NuRadioReco.utilities import units
 from tqdm import tqdm
 from argparse import ArgumentParser
-import warnings
 import pandas as pd
 import NuRadioReco.framework.event
 import NuRadioReco.framework.station
@@ -17,6 +16,7 @@ import NuRadioReco.framework.channel
 import NuRadioReco.framework.trigger
 from NuRadioReco.framework.parameters import channelParameters as chp
 from NuRadioReco.modules.RNO_G.dataProviderRNOG import dataProviderRNOG
+from NuRadioReco.framework.parameters import channelParametersRNOG as chp_rnog
 from cycler import cycler
 import matplotlib as mpl
 #from cmap import Colormap
@@ -27,7 +27,7 @@ from scipy.stats import skew
 import json
 import matplotlib.dates as mdates
 from datetime import timezone
-from scipy.stats import gaussian_kde, skew
+from scipy.stats import gaussian_kde, skew, binomtest
 from scipy.signal import find_peaks
 
 
@@ -214,6 +214,7 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
     trace_batches = []
     times_trace_batches = []
     snr_batches = []
+    glitch_batches = []
     run_no_all = []
     times_all = []
     freqs = None
@@ -221,6 +222,10 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
     from NuRadioReco.modules.channelSignalReconstructor import channelSignalReconstructor as csr
     csr = csr()
     csr.begin(debug=False)
+
+    from NuRadioReco.modules.RNO_G.channelGlitchDetector import channelGlitchDetector as cgd_rnog
+    cgd_rnog = cgd_rnog()
+    cgd_rnog.begin()
 
     for batch in tqdm(np.array_split(np.array(file_list), n_batches), desc="Reading batches", unit="batch"):
         tableReader = dataProviderRNOG()
@@ -246,6 +251,7 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
         trace_arr = np.zeros((len(channel_list), n_events, 2048))
         times_trace_arr = np.zeros((len(channel_list), n_events, 2048))
         snr_arr = np.zeros((len(channel_list), n_events))
+        glitch_arr = np.zeros((len(channel_list), n_events))
 
         run_no = []
         times = []
@@ -258,6 +264,7 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
             run_no.append(event.get_run_number())
 
             csr.run(evt=event, station=station, det=None, stored_noise=False)
+            cgd_rnog.run(event=event, station=station, det=None)
             for i_ch, ch in enumerate(channel_list):
                 channel = station.get_channel(ch)
 
@@ -267,6 +274,9 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
                 snr_dict = channel.get_parameter(chp.SNR)
                 snr_peak = snr_dict["peak_amplitude"]
                 snr_arr[i_ch, idx] = snr_peak
+
+                glitching_values = channel.get_parameter(chp_rnog.glitch_test_statistic)
+                glitch_arr[i_ch, idx] = glitching_values
                 
                 spec = channel.get_frequency_spectrum()
                 spec_arr[i_ch, idx, :] = np.abs(spec)
@@ -281,6 +291,7 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
         trace_batches.append(trace_arr)
         times_trace_batches.append(times_trace_arr)
         snr_batches.append(snr_arr)
+        glitch_batches.append(glitch_arr)
         run_no_all.extend(run_no)
         times_all.extend(times)
 
@@ -288,6 +299,7 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
     trace_arr = np.concatenate(trace_batches, axis=1)
     times_trace_arr = np.concatenate(times_trace_batches, axis=1)
     snr_arr = np.concatenate(snr_batches, axis=1)
+    glitch_arr = np.concatenate(glitch_batches, axis=1)
 
     run_no = np.array(run_no_all)
     times = np.array(times_all)     
@@ -303,10 +315,10 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
     print(f"freqs shape: {freqs.shape}, spec_arr shape: {spec_arr.shape}, trace_arr shape: {trace_arr.shape}, times_trace_arr shape: {times_trace_arr.shape}, snr_arr shape: {snr_arr.shape}, times shape: {times.shape}, run_no shape: {run_no.shape}  ")
     print(f"trigger types: {np.unique(event_info['triggerType'])}")
 
-    return spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info
+    return spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info, glitch_arr
 
     
-
+#### Spectral analysis functions ####
 def find_amplitude_ratio_in_band(station_id, freqs, norm_spec_arr, upward_channels, downward_channels, reference_channels, freq_min, freq_max):
     '''Find normalized amplitude ratio of upward vs downward channels in a given frequency band. This will be replaced by lab measurements in the future.'''
     freq_mask = (freqs >= freq_min) & (freqs <= freq_max)
@@ -361,7 +373,6 @@ def find_amplitude_ratio_in_band_specific_bkg(station_id, freqs, norm_spec_arr, 
 
 def excess_info_from_ratio(ratio_arr, alpha=0.01, freq_range_str=""):
     '''Calculate excess information from amplitude ratios in frequency bands.'''
-    from scipy.stats import binomtest
 
     log_ratio = np.log10(np.asarray(ratio_arr))
     median_log_ratio = np.median(log_ratio)
@@ -373,9 +384,9 @@ def excess_info_from_ratio(ratio_arr, alpha=0.01, freq_range_str=""):
     result = binomtest(k, n, p=0.5, alternative="greater")
     pval = result.pvalue
     statistic = result.statistic
-    confidence_interval = result.proportion_ci(confidence_level=0.95)
+    confidence_interval = result.proportion_ci(confidence_level=0.99)
 
-    print(f"Binomial test for frequency range {freq_range_str}: k={k}, n={n}, pval={pval:.3e}, statistic={statistic:.3f}, 95% CI={confidence_interval}")
+    print(f"Binomial test for frequency range {freq_range_str}: k={k}, n={n}, pval={pval:.3e}, statistic={statistic:.3f}, 99% CI={confidence_interval}")
 
     if pval > alpha:
         validation = "NO EXCESS (sign-test)"
@@ -407,31 +418,6 @@ def validate_excess_in_bands(ratio_arr_gal, ratio_arr_360, ratio_arr_482, ratio_
         "freq_482_485MHz": freq482_info,
         "freq_240_272MHz": freq240_info
     }
-
-def debug_plot_ratios(ratio_arr_gal, ratio_arr_360, ratio_arr_482, ratio_arr_240, channels_order, save_location, station_id, run_label, bins=30):
-    fig, axes = plt.subplots(1, 4, figsize=(20, 5), sharey=True)
-    bands = [("80–120 MHz  (FORCE Trigger)", ratio_arr_gal),
-             ("360–380 MHz  (FORCE Trigger)", ratio_arr_360),
-             ("482–485 MHz  (FORCE Trigger)", ratio_arr_482),
-             ("240–272 MHz  (FORCE Trigger)", ratio_arr_240)]
-
-    for ax, (title, ratio_list) in zip(axes, bands):
-        for ch, r in zip(channels_order, ratio_list):
-            r = np.asarray(r)
-            ax.hist(np.log10(r), bins=bins, histtype="step", linewidth=1.3, label=f"Ch {ch}", alpha=0.8)
-
-        ax.set_title(title)
-        ax.set_xlabel("log10(R)")
-        ax.grid(True, alpha=0.3)
-
-    axes[0].set_ylabel("Counts")
-
-    handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper right", ncol=8, frameon=True)
-    plt.tight_layout()
-    fig.savefig(os.path.join(save_location,f"debug_amplitude_ratios_force_trigger_{station_id}_{run_label}.pdf",))
-    plt.close(fig)
-
 
 def plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr, freqs, upward_channels, downward_channels, save_location, run_label):
     '''Plot time-integrated surface channel spectra.'''
@@ -539,7 +525,7 @@ def plot_time_integrated_deep_spectra(station_id, spec_arr, freqs, vpol_channels
     plt.tight_layout()
     plt.savefig(os.path.join(save_location, f"time_integrated_deep_spectra_unnormalized_force_trigger_{station_id}_{run_label}.pdf"))
 
-
+#### SNR analysis functions ####
 def calculate_statistics_log_snr(snr_arr):
     '''Calculate log10 statistics (mean, median, std, mean-median) for SNR values.'''
     log_snr_arr = np.zeros((len(snr_arr), len(snr_arr[0])))
@@ -547,26 +533,25 @@ def calculate_statistics_log_snr(snr_arr):
         snr_arr_ch = snr_arr[ch]
         log_snr_arr_ch = np.log10(snr_arr_ch)
         log_snr_arr[ch, :] = log_snr_arr_ch
-    log_mean_list = []
-    log_median_list = []
-    log_std_list = []
-    log_difference_list = []
+    log_mean_dict = {}
+    log_median_dict = {}
+    log_std_dict = {}
+    log_difference_dict = {}
 
     for ch in range(len(log_snr_arr)):
-        log_mean_list.append(np.mean(log_snr_arr[ch]))
-        log_median_list.append(np.median(log_snr_arr[ch]))
-        log_std_list.append(np.std(log_snr_arr[ch]))
-        log_difference_list.append(np.mean(log_snr_arr[ch]) - np.median(log_snr_arr[ch]))
+        log_mean_dict[ch] = np.mean(log_snr_arr[ch])
+        log_median_dict[ch] = np.median(log_snr_arr[ch])
+        log_std_dict[ch] = np.std(log_snr_arr[ch])
+        log_difference_dict[ch] = np.mean(log_snr_arr[ch]) - np.median(log_snr_arr[ch])
 
-    return log_snr_arr, log_mean_list, log_median_list, log_std_list, log_difference_list
-
-def calculate_z_score_snr(snr_arr, mean_list, std_list, channel_list):
+    return log_snr_arr, log_mean_dict, log_median_dict, log_std_dict, log_difference_dict
+def calculate_z_score_snr(snr_arr, ref_mean_dict, ref_std_dict, channel_list):
     '''Calculate the z-score for SNR values given mean and standard deviation lists for each channel.'''
     z_score_arr = np.zeros((len(snr_arr), len(snr_arr[0])))
     for ch in channel_list:
         snr_arr_ch = snr_arr[ch]
-        mean_ch = mean_list[ch]
-        std_ch = std_list[ch]
+        mean_ch = ref_mean_dict[ch]
+        std_ch = ref_std_dict[ch]
         z_score_arr_ch = (snr_arr_ch - mean_ch) / std_ch
         z_score_arr[ch,:] = z_score_arr_ch
 
@@ -589,7 +574,7 @@ def symmetry_metrics_z_score(z_score):
         metrics[f"ch_{ch}"] = symmetry_metrics_channel_z_score(z_score_ch)
     return metrics
 
-def load_k_values_json(filename):
+def load_values_json(filename):
     ''' Load k-values from a JSON file.'''
     if not os.path.isabs(filename):
         filepath = os.path.join(SCRIPT_DIR, filename)
@@ -597,9 +582,9 @@ def load_k_values_json(filename):
         filepath = filename
     with open(filepath, "r") as f:
         data = json.load(f)     
-    k_values = {int(ch): float(k) for ch, k in data.items()}
+    values = {int(ch): float(k) for ch, k in data.items()}
 
-    return k_values
+    return values
 
 def outlier_flag(z_score_log, k_values_log, channel_list):
     '''Flag outlier events based on the k-values for each channel.'''
@@ -633,94 +618,6 @@ def find_outlier_details(z_score_log, k_values_log, flag, event_info, channel_li
 
     return outlier_details
 
-def calculate_vrms(trace_arr, channel_list, event_info):
-    '''Calculate Vrms for each channel and event according to trigger types.'''
-    vrms_arr = np.std(trace_arr, axis=2)  # (n_channels, n_events)
-
-    force_mask = event_info["triggerType"] == "FORCE"
-    radiant0_mask = event_info["triggerType"] == "RADIANT0"
-    radiant1_mask = event_info["triggerType"] == "RADIANT1"
-    lt_mask = event_info["triggerType"] == "LT"
-
-    vrms_arr_force = vrms_arr[:, force_mask]
-    vrms_arr_radiant0 = vrms_arr[:, radiant0_mask]
-    vrms_arr_radiant1 = vrms_arr[:, radiant1_mask]
-    vrms_arr_lt = vrms_arr[:, lt_mask]
-
-    return vrms_arr, vrms_arr_force, vrms_arr_radiant0, vrms_arr_radiant1, vrms_arr_lt
-
-def kde_modality(vrms_arr, channel_list, bandwidth=None, grid_points = 512, peak_prominence=0.01):
-    '''Calculate KDE and modality for Vrms distributions.'''
-
-    modality_dict = {}
-
-    for ch in channel_list:
-        vrms_ch = vrms_arr[ch]
-        vrms_ch = vrms_ch[~np.isnan(vrms_ch)]
-
-        kde = gaussian_kde(vrms_ch, bw_method=bandwidth)
-        vrms_min = np.min(vrms_ch)
-        vrms_max = np.max(vrms_ch)
-        vrms_grid = np.linspace(vrms_min, vrms_max, grid_points)
-        kde_values = kde(vrms_grid)
-
-        # Adjust prominence to be relative to the KDE range
-        abs_prom = peak_prominence * (np.max(kde_values) - np.min(kde_values))
-
-        peaks, properties = find_peaks(kde_values, prominence=abs_prom)
-
-        modality_dict[ch] = {
-            "kde": kde,
-            "vrms_grid": vrms_grid,
-            "kde_values": kde_values,
-            "n_peaks": len(peaks),
-            "peaks": peaks,
-            "prominences": properties["prominences"],
-        }
-
-    return modality_dict
-
-def tail_fraction_and_trimmed_skew_two_sided(vrms_arr, channel_list, lower_percentile=25, upper_percentile=75, extreme_k=3):
-    '''Calculate tail fraction and two-sided trimmed skewness for Vrms distributions.'''
-    tail_dict = {}
-
-    for ch in channel_list:
-        vrms_ch = vrms_arr[ch]
-        vrms_ch = vrms_ch[~np.isnan(vrms_ch)]
-        n_events = len(vrms_ch)
-
-        full_skew = skew(vrms_ch, bias=False)
-
-        q1, q3 = np.percentile(vrms_ch, [lower_percentile, upper_percentile])
-        iqr = q3 - q1
-
-        lower_bound = q1 - extreme_k * iqr
-        upper_bound = q3 + extreme_k * iqr
-
-        high_mask = vrms_ch > upper_bound
-        high_frac = np.mean(high_mask)
-
-        low_mask = vrms_ch < lower_bound
-        low_frac = np.mean(low_mask)
-
-        core_high = vrms_ch[~high_mask]
-        skew_trim_high = skew(core_high, bias=False) if len(core_high) > 10 else np.nan
-
-        core_low = vrms_ch[~low_mask]
-        skew_trim_low = skew(core_low, bias=False) if len(core_low) > 10 else np.nan
-
-        tail_dict[ch] = {
-            "n_events": n_events,
-            "full_skew": full_skew,
-            "high_tail_fraction": high_frac,
-            "low_tail_fraction": low_frac,
-            "trimmed_skew_high": skew_trim_high,
-            "trimmed_skew_low": skew_trim_low,
-        }
-
-    return tail_dict
-
-
 def print_outlier_summary(outlier_details):
     '''Print a summary of outlier events for each channel.'''
     for ch in sorted(outlier_details.keys()):
@@ -737,6 +634,7 @@ def print_outlier_summary(outlier_details):
         for e in entries:
             print(f"  - run {e['run']}, event {e['eventNumber']}, "
                   f"|z| = {e['z_abs']:.2f} (delta = {e['z_minus_k']:.2f} above k)")
+            
             
 def choose_day_interval(times):
     times = pd.to_datetime(times, utc=True)
@@ -797,9 +695,13 @@ def plot_snr_against_time(station_id,times,snr_arr,flag,z_log,k_list,channels,nr
     ticks_ax = axs[-1,0]
     time_span = (times.max() - times.min()).total_seconds() / 86400.0  # in days
 
-    if time_span < 3:
-        # Use hourly ticks if less than 3 days
-        ticks_ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
+    if time_span < 1:
+        # Use 2h ticks if less than 1 day
+        ticks_ax.xaxis.set_major_locator(mdates.HourLocator(interval=2))
+        ticks_ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d\n%H:%M", tz=timezone.utc))
+    elif time_span < 3:
+        # Use 6h ticks if less than 3 days
+        ticks_ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
         ticks_ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d\n%H:%M", tz=timezone.utc))
     else:
         # Use day ticks otherwise
@@ -812,6 +714,207 @@ def plot_snr_against_time(station_id,times,snr_arr,flag,z_log,k_list,channels,nr
     fig.supxlabel("Date [UTC]", x = 0.5, y = 0.06)
     fig.supylabel(r"$\log_{10}(\mathrm{SNR})$", x = 0.02)
     plt.savefig(os.path.join(save_location,f"snr_against_time_{station_id}_{run_label}.pdf"))
+            
+
+#### Vrms analysis functions ####
+def calculate_vrms(trace_arr, event_info):
+    '''Calculate Vrms for each channel and event according to trigger types.'''
+    vrms_arr = np.std(trace_arr, axis=2)  # (n_channels, n_events)
+
+    force_mask = event_info["triggerType"] == "FORCE"
+    radiant0_mask = event_info["triggerType"] == "RADIANT0"
+    radiant1_mask = event_info["triggerType"] == "RADIANT1"
+    lt_mask = event_info["triggerType"] == "LT"
+
+    vrms_arr_force = vrms_arr[:, force_mask]
+    vrms_arr_radiant0 = vrms_arr[:, radiant0_mask]
+    vrms_arr_radiant1 = vrms_arr[:, radiant1_mask]
+    vrms_arr_lt = vrms_arr[:, lt_mask]
+
+    return vrms_arr, vrms_arr_force, vrms_arr_radiant0, vrms_arr_radiant1, vrms_arr_lt
+
+def kde_modality(vrms_arr, channel_list, bandwidth=None, grid_points = 512, peak_prominence=0.01):
+    '''Calculate KDE and modality for Vrms distributions.'''
+
+    modality_dict = {}
+
+    for ch in channel_list:
+        vrms_ch = vrms_arr[ch]
+        vrms_ch = vrms_ch[~np.isnan(vrms_ch)]
+
+        kde = gaussian_kde(vrms_ch, bw_method=bandwidth)
+        vrms_min = np.min(vrms_ch)
+        vrms_max = np.max(vrms_ch)
+        vrms_grid = np.linspace(vrms_min, vrms_max, grid_points)
+        kde_values = kde(vrms_grid)
+
+        # Adjust prominence to be relative to the KDE range
+        abs_prom = peak_prominence * (np.max(kde_values) - np.min(kde_values))
+
+        peaks, properties = find_peaks(kde_values, prominence=abs_prom, height=0.05*np.max(kde_values))
+
+        modality_dict[ch] = {
+            "kde": kde,
+            "vrms_grid": vrms_grid,
+            "kde_values": kde_values,
+            "n_peaks": len(peaks),
+            "peaks": peaks,
+            "prominences": properties["prominences"],
+        }
+
+    return modality_dict
+
+def tail_fraction_and_trimmed_skew_two_sided(vrms_arr, channel_list, lower_percentile=25, upper_percentile=75, extreme_k=3):
+    '''Calculate tail fraction and two-sided trimmed skewness for Vrms distributions.'''
+    tail_dict = {}
+
+    for ch in channel_list:
+        vrms_ch = vrms_arr[ch]
+        vrms_ch = vrms_ch[~np.isnan(vrms_ch)]
+        n_events = len(vrms_ch)
+
+        full_skew = skew(vrms_ch, bias=False)
+
+        q1, q3 = np.percentile(vrms_ch, [lower_percentile, upper_percentile])
+        iqr = q3 - q1
+
+        lower_bound = q1 - extreme_k * iqr
+        upper_bound = q3 + extreme_k * iqr
+
+        high_mask = vrms_ch > upper_bound
+        high_frac = np.mean(high_mask)
+
+        low_mask = vrms_ch < lower_bound
+        low_frac = np.mean(low_mask)
+
+        core_high = vrms_ch[~high_mask]
+        skew_trim_high = skew(core_high, bias=False) if len(core_high) > 10 else np.nan
+
+        core_low = vrms_ch[~low_mask]
+        skew_trim_low = skew(core_low, bias=False) if len(core_low) > 10 else np.nan
+
+        tail_dict[ch] = {
+            "n_events": n_events,
+            "full_skew": full_skew,
+            "high_tail_fraction": high_frac,
+            "low_tail_fraction": low_frac,
+            "trimmed_skew_high": skew_trim_high,
+            "trimmed_skew_low": skew_trim_low,
+        }
+
+    return tail_dict
+
+def report_vrms_characteristics(modality_dict, tail_dict, channel_list):
+    for ch in channel_list:
+        # modality from KDE peak count
+        n_peaks = modality_dict[ch]["n_peaks"]
+        if n_peaks == 0:
+            modality = "flat/noisy"
+        elif n_peaks == 1:
+            modality = "unimodal"
+        elif n_peaks == 2:
+            modality = "bimodal"
+        else:
+            modality = f"multimodal ({n_peaks} peaks)"
+
+        # tail + skewness characteristics
+        full_skew   = tail_dict[ch]["full_skew"]
+        high_frac   = tail_dict[ch]["high_tail_fraction"]
+        low_frac    = tail_dict[ch]["low_tail_fraction"]
+        skew_trim_h = tail_dict[ch]["trimmed_skew_high"]
+        skew_trim_l = tail_dict[ch]["trimmed_skew_low"]
+
+        # classify tail behavior
+        if 0 < high_frac < 0.01 and full_skew > 0.5 and not np.isnan(skew_trim_h):
+            tail_label = "rare high extremes"
+            tail_frac = high_frac
+        elif 0.01 <= high_frac < 0.05 and full_skew > 0:
+            tail_label = "moderate high skew"
+            tail_frac = high_frac
+        elif high_frac >= 0.05 and full_skew > 0:
+            tail_label = "bulk high skew"
+            tail_frac = high_frac
+        elif 0 < low_frac < 0.01 and full_skew < -0.5 and not np.isnan(skew_trim_l):
+            tail_label = "rare low extremes"
+            tail_frac = low_frac
+        elif 0.01 <= low_frac < 0.05 and full_skew < 0:
+            tail_label = "moderate low skew"
+            tail_frac = low_frac
+        elif low_frac >= 0.05 and full_skew < 0:
+            tail_label = "bulk low skew"
+            tail_frac = low_frac
+        else:
+            tail_label = "no significant tails"
+            tail_frac = None
+
+        # output summary
+        if tail_frac is not None:
+            tail_label += f" (fraction: {tail_frac:.3f})"
+            print(f"Ch {ch:02d}: {modality} ({tail_label})")
+        else: 
+            print(f"Ch {ch:02d}: {modality} ({tail_label})")
+
+#### Glitching analysis functions ####
+def binomtest_glitch_fraction(glitch_arr, channel_list, alpha=0.01):
+    '''Perform binomial test on glitch fractions for each channel (with p0=0.1).'''
+    glitch_info = {}
+    n_events = glitch_arr.shape[1]
+
+    for ch in channel_list:
+        glitch_ch = glitch_arr[ch]
+        n_glitches = np.sum(glitch_ch > 0)
+
+        result = binomtest(n_glitches, n_events, p=0.1, alternative="greater")
+        pval = result.pvalue
+        statistic = result.statistic
+        confidence_interval = result.proportion_ci(confidence_level=0.99)
+
+        if pval > alpha:
+            validation = "NO EXCESSIVE GLITCHING"
+        else:
+            if confidence_interval.low > 0.3:
+                validation = "STRONG EXCESSIVE GLITCHING"
+            elif confidence_interval.low > 0.2:
+                validation = "MODERATE EXCESSIVE GLITCHING"
+            else:
+                validation = "WEAK EXCESSIVE GLITCHING"
+
+        glitch_info[ch] = {
+            "n_glitches": int(n_glitches),
+            "n_events": int(n_events),
+            "pval": float(pval),
+            "confidence_interval": (float(confidence_interval.low), float(confidence_interval.high)),
+            "glitch_fraction": float(n_glitches / n_events),
+            "validation": validation,
+        }
+
+    return glitch_info
+
+
+#### Debug plots ####
+def debug_plot_ratios(ratio_arr_gal, ratio_arr_360, ratio_arr_482, ratio_arr_240, channels_order, save_location, station_id, run_label, bins=30):
+    fig, axes = plt.subplots(1, 4, figsize=(20, 5), sharey=True)
+    bands = [("80–120 MHz  (FORCE Trigger)", ratio_arr_gal),
+             ("360–380 MHz  (FORCE Trigger)", ratio_arr_360),
+             ("482–485 MHz  (FORCE Trigger)", ratio_arr_482),
+             ("240–272 MHz  (FORCE Trigger)", ratio_arr_240)]
+
+    for ax, (title, ratio_list) in zip(axes, bands):
+        for ch, r in zip(channels_order, ratio_list):
+            r = np.asarray(r)
+            ax.hist(np.log10(r), bins=bins, histtype="step", linewidth=1.3, label=f"Ch {ch}", alpha=0.8)
+
+        ax.set_title(title)
+        ax.set_xlabel("log10(R)")
+        ax.grid(True, alpha=0.3)
+
+    axes[0].set_ylabel("Counts")
+
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper right", ncol=8, frameon=True)
+    plt.tight_layout()
+    fig.savefig(os.path.join(save_location,f"debug_amplitude_ratios_force_trigger_{station_id}_{run_label}.pdf",))
+    plt.close(fig)
 
 def debug_plot_snr_distribution(log_snr_arr, channel_list, save_location, station_id, run_label, bins=30):
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -846,6 +949,47 @@ def debug_plot_z_score_snr(z_score_arr, channel_list, save_location, station_id,
     plt.tight_layout()
     fig.savefig(os.path.join(save_location,f"debug_z_score_snr_force_trigger_{station_id}_{run_label}.pdf",))
     plt.close(fig)
+
+def debug_plot_vrms_distribution(vrms_arr, modality_dict, channel_list, station_id, run_label, trigger_label, save_location, n_rows=12, n_cols=2):
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 36))
+    axes = axes.flatten()
+
+    for idx, ch in enumerate(channel_list):
+        ax = axes[idx]
+        info = modality_dict[ch]
+        vrms = vrms_arr[ch]
+        vrms = vrms[np.isfinite(vrms)] 
+        vrms_grid = info["vrms_grid"]
+        kde_values = info["kde_values"]
+        peaks = info["peaks"]
+        n_peaks = info["n_peaks"]
+
+        if n_peaks == 0:
+            modality = "flat/noisy"
+        elif n_peaks == 1:
+            modality = "unimodal"
+        elif n_peaks == 2:
+            modality = "bimodal"
+        else:
+            modality = f"multimodal ({n_peaks})"
+
+        # histogram
+        ax.hist(vrms, bins=30, density=True, alpha=0.3, color="gray")
+        # kde curve
+        ax.plot(vrms_grid, kde_values, color="blue", lw=1.5)
+        # peaks
+        if len(peaks) > 0:
+            ax.plot(vrms_grid[peaks], kde_values[peaks], "ro", markersize=5)
+
+        ax.set_title(f"Ch {ch}: {modality}")
+        ax.set_xlabel("Vrms Values [V]")
+        ax.set_ylabel("KDE Density")
+
+    for i in range(len(channel_list), n_rows * n_cols):
+        axes[i].axis("off")
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_location,f"debug_vrms_hist_kde_density_peaks_{station_id}_{run_label}_{trigger_label}.pdf",))
 
 
 if __name__ == "__main__":
@@ -906,7 +1050,7 @@ if __name__ == "__main__":
     os.makedirs(save_location, exist_ok=True)
 
     # Read data
-    spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info = read_rnog_data(station_id, run_numbers, backend=backend) 
+    spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info, glitch_arr = read_rnog_data(station_id, run_numbers, backend=backend) 
 
     # Normalize surface channel spectra
     norm_spec_arr, scale_factors = normalize_channels(spec_arr, freqs, downward_channels, upward_channels)
@@ -962,10 +1106,13 @@ if __name__ == "__main__":
     times_force = times[force_mask]
 
     log_snr_arr, log_mean_list, log_median_list, log_std_list, log_difference_list = calculate_statistics_log_snr(snr_arr_force)
-
-    z_score_arr_log_snr = calculate_z_score_snr(log_snr_arr, log_mean_list, log_std_list, all_channels)
+    ref_log_mean_filename = f"station_{station_id}_ref_log_mean_snr.json"
+    ref_log_std_filename = f"station_{station_id}_ref_log_std_snr.json"
+    ref_log_mean_list = load_values_json(ref_log_mean_filename)
+    ref_log_std_list = load_values_json(ref_log_std_filename)
+    z_score_arr_log_snr = calculate_z_score_snr(log_snr_arr, ref_log_mean_list, ref_log_std_list, all_channels)
     k_values_filename_snr = f"station_{station_id}_k_ref_values_snr.json"
-    k_values_log_snr = load_k_values_json(k_values_filename_snr)
+    k_values_log_snr = load_values_json(k_values_filename_snr)
     flag_outliers_snr = outlier_flag(z_score_arr_log_snr, k_values_log_snr, all_channels)
 
     outlier_details_snr = find_outlier_details(z_score_arr_log_snr, k_values_log_snr, flag_outliers_snr, event_info_force, all_channels)
@@ -974,8 +1121,63 @@ if __name__ == "__main__":
     day_interval = choose_day_interval(times)
     plot_snr_against_time(station_id, times_force, snr_arr_force, flag_outliers_snr, z_score_arr_log_snr, k_values_log_snr, all_channels, nrows=12, ncols=2, day_interval=day_interval)
 
+    # Vrms analysis
+    vrms_arr, vrms_arr_force, vrms_arr_radiant0, vrms_arr_radiant1, vrms_arr_lt = calculate_vrms(trace_arr, event_info)
 
+    modality_dict_force = kde_modality(vrms_arr_force, all_channels, bandwidth=None, grid_points=512, peak_prominence=0.01)
+    tail_dict_force = tail_fraction_and_trimmed_skew_two_sided(vrms_arr_force, all_channels, lower_percentile=25, upper_percentile=75, extreme_k=3)
+    print("\nVrms characteristics for FORCE trigger events:")
+    if len(vrms_arr_force[1]) < 100:
+            print(f"!!!! Warning: FORCE trigger has less than 100 valid Vrms entries ({len(vrms_arr_force)}). Results for the Vrms statistics may be unreliable. !!!!")
+    report_vrms_characteristics(modality_dict_force, tail_dict_force, all_channels)
+
+    modality_dict_radiant0 = kde_modality(vrms_arr_radiant0, all_channels, bandwidth=None, grid_points=512, peak_prominence=0.01)
+    tail_dict_radiant0 = tail_fraction_and_trimmed_skew_two_sided(vrms_arr_radiant0, all_channels, lower_percentile=25, upper_percentile=75, extreme_k=3)
+    print("\nVrms characteristics for RADIANT0 trigger events:")
+    if len(vrms_arr_radiant0[1]) < 100:
+            print(f"!!!! Warning: RADIANT0 trigger has less than 100 valid Vrms entries ({len(vrms_arr_radiant0)}). Results for the Vrms statistics may be unreliable. !!!!")
+    report_vrms_characteristics(modality_dict_force, tail_dict_force, all_channels)
+    report_vrms_characteristics(modality_dict_radiant0, tail_dict_radiant0, all_channels)
+
+    modality_dict_radiant1 = kde_modality(vrms_arr_radiant1, all_channels, bandwidth=None, grid_points=512, peak_prominence=0.01)
+    tail_dict_radiant1 = tail_fraction_and_trimmed_skew_two_sided(vrms_arr_radiant1, all_channels, lower_percentile=25, upper_percentile=75, extreme_k=3)
+    print("\nVrms characteristics for RADIANT1 trigger events:")
+    if len(vrms_arr_radiant1[1]) < 100:
+            print(f"!!!! Warning: RADIANT1 trigger has less than 100 valid Vrms entries ({len(vrms_arr_radiant1)}). Results for the Vrms statistics may be unreliable. !!!!")
+    report_vrms_characteristics(modality_dict_radiant1, tail_dict_radiant1, all_channels)
+
+    modality_dict_lt = kde_modality(vrms_arr_lt, all_channels, bandwidth=None, grid_points=512, peak_prominence=0.01)
+    tail_dict_lt = tail_fraction_and_trimmed_skew_two_sided(vrms_arr_lt, all_channels, lower_percentile=25, upper_percentile=75, extreme_k=3)
+    print("\nVrms characteristics for LT trigger events:")  
+    if len(vrms_arr_lt[1]) < 100:
+            print(f"!!!! Warning: LT trigger has less than 100 valid Vrms entries ({len(vrms_arr_lt)}). Results for the Vrms statistics may be unreliable. !!!!")
+    report_vrms_characteristics(modality_dict_lt, tail_dict_lt, all_channels)
+
+    # The Vrms statistics can be misleading (especially for low event number) so the debugging plots are always generated
+    debug_plot_vrms_distribution(vrms_arr_force, modality_dict_force, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="force", save_location=save_location, n_rows=12, n_cols=2)
+    debug_plot_vrms_distribution(vrms_arr_radiant0, modality_dict_radiant0, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="radiant0", save_location=save_location, n_rows=12, n_cols=2)
+    debug_plot_vrms_distribution(vrms_arr_radiant1, modality_dict_radiant1, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="radiant1", save_location=save_location, n_rows=12, n_cols=2)
+    debug_plot_vrms_distribution(vrms_arr_lt, modality_dict_lt, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="lt", save_location=save_location, n_rows=12, n_cols=2)
+    
+    # Glitching analysis
+    glitch_info = binomtest_glitch_fraction(glitch_arr, all_channels, alpha=0.01)
+    print("\nGlitching analysis results:")
+    for ch in all_channels:
+        info = glitch_info[ch]
+        print(
+            f"Channel {ch:2d} | "
+            f"n_glitches: {info['n_glitches']:4d} | "
+            f"n_events: {info['n_events']:<4d} | "
+            f"(frac={info['glitch_fraction']:.3f}) | "
+            f"p={info['pval']:.2e} | "
+            f"CI99%={info['confidence_interval']} | "
+            f"{info['validation']}"
+        )
+
+    # Debug plots
     if args.debug_plot:   
         debug_plot_ratios(ratio_arr_gal, ratio_arr_360, ratio_arr_482, ratio_arr_240, channels_order=channels_order, save_location=save_location, station_id=station_id, run_label=run_label, bins=30,)
         debug_plot_snr_distribution(log_snr_arr, channel_list=all_channels, save_location=save_location, station_id=station_id, run_label=run_label, bins=30)
         debug_plot_z_score_snr(z_score_arr_log_snr, channel_list=all_channels, save_location=save_location, station_id=station_id, run_label=run_label, bins=30)
+        
+        
