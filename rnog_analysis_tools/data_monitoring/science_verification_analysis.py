@@ -697,11 +697,11 @@ def plot_snr_against_time(station_id,times,snr_arr,flag,z_log,k_list,channels,nr
 
     if time_span < 1:
         # Use 2h ticks if less than 1 day
-        ticks_ax.xaxis.set_major_locator(mdates.HourLocator(interval=2))
+        ticks_ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
         ticks_ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d\n%H:%M", tz=timezone.utc))
     elif time_span < 3:
         # Use 6h ticks if less than 3 days
-        ticks_ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
+        ticks_ax.xaxis.set_major_locator(mdates.HourLocator(interval=12))
         ticks_ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d\n%H:%M", tz=timezone.utc))
     else:
         # Use day ticks otherwise
@@ -853,6 +853,167 @@ def report_vrms_characteristics(modality_dict, tail_dict, channel_list):
             print(f"Ch {ch:02d}: {modality} ({tail_label})")
         else: 
             print(f"Ch {ch:02d}: {modality} ({tail_label})")
+
+def plot_vrms_values_against_time(times, vrms_arr_all, channel_list, station_id, run_label, save_location, n_rows = 12, n_cols = 2, day_interval=5):
+    '''Plot Vrms distributions for different trigger types.'''
+
+    force_mask = event_info["triggerType"] == "FORCE"
+    radiant0_mask = event_info["triggerType"] == "RADIANT0"
+    radiant1_mask = event_info["triggerType"] == "RADIANT1"
+    lt_mask = event_info["triggerType"] == "LT"
+
+    trigger_masks = {"FORCE": force_mask, 
+                     "RADIANT0": radiant0_mask,
+                     "RADIANT1": radiant1_mask,
+                     "LT": lt_mask,}
+
+    trigger_colors = {"FORCE": "tab:blue", 
+                      "RADIANT0": "tab:orange",
+                      "RADIANT1": "tab:green",
+                      "LT": "tab:red",}
+
+    times = np.asarray(times)
+    vrms_arr_all = np.asarray(vrms_arr_all)
+
+    n_channels = len(channel_list)
+
+    fig, axs = plt.subplots(n_rows, n_cols, figsize=(16, 36), sharex=True, squeeze=False)
+    axs = axs.ravel()
+
+    legend_handles = {}
+
+    for idx, ch in enumerate(channel_list):
+        ax = axs[idx]
+        vrms_ch = vrms_arr_all[ch]
+
+        for trig_name, trig_mask in trigger_masks.items():
+            times_trig = times[trig_mask]
+            vrms_trig = vrms_ch[trig_mask]
+
+            scatter = ax.scatter(times_trig, vrms_trig, s=8, alpha=0.7, label=trig_name, color=trigger_colors[trig_name])
+            if trig_name not in legend_handles:
+                legend_handles[trig_name] = scatter
+                
+
+        ax.set_title(f"Channel {ch}")
+        ax.grid(alpha=0.4)
+    
+    for j in range(len(channel_list), len(axs)):
+        axs[j].set_visible(False)
+
+    ticks_ax = axs[-1]   
+    time_span = times.max() - times.min()     
+    time_span_days = time_span / np.timedelta64(1, "D")
+
+    if time_span_days < 1:
+        ticks_ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
+        ticks_ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d\n%H:%M", tz=timezone.utc))
+    elif time_span_days < 3:
+        ticks_ax.xaxis.set_major_locator(mdates.HourLocator(interval=12))
+        ticks_ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d\n%H:%M", tz=timezone.utc))
+    else:
+        ticks_ax.xaxis.set_major_locator(mdates.DayLocator(interval=day_interval))
+        ticks_ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d", tz=timezone.utc))
+
+    fig.legend(handles=[legend_handles[k] for k in trigger_masks.keys()], labels=list(trigger_masks.keys()), 
+               loc="lower center", ncol=4, frameon=True, markerscale=2, bbox_to_anchor=(0.5, 0.005))
+    
+    fig.supxlabel("Date [UTC]", x=0.5, y=0.02)
+    fig.supylabel(r"$V_\mathrm{rms}$ [V]", x=0.02)
+    plt.subplots_adjust(bottom=0.05, wspace=0.2, hspace=0.4, left=0.1)
+    plt.savefig(os.path.join(save_location, f"vrms_against_time_{station_id}_{run_label}.pdf"))
+    plt.close(fig)
+
+#### Trigger analysis (adapted from the plot_trigger() function from analyze_run.py) ####
+def compute_radiant_thresholds(event_info, down_channels, up_channels):
+    radiant = event_info["radiantThrs"]
+
+    downward = radiant[:, down_channels].mean(axis=1)
+    upward   = radiant[:, up_channels].mean(axis=1)
+    low_trig = event_info["lowTrigThrs"].mean(axis=1)
+
+    return upward, downward, low_trig
+
+def plot_trigger_rate_with_thresholds(station_id, event_info, down_channels, up_channels, run_label, day_interval, bin_width_initial=300, max_bins=800, save_location=None):
+
+    trigger_times = np.asarray(event_info["triggerTime"])
+    readout_times = np.asarray(event_info["readoutTime"])
+
+    run_duration = trigger_times.max() - trigger_times.min()
+    run_duration_readout = readout_times.max() - readout_times.min()
+
+    bin_width = bin_width_initial
+    nbins = int(run_duration // bin_width)
+    if nbins > max_bins:
+        bin_width = 3600  # 1 hour
+        nbins = int(run_duration // bin_width)
+
+    times = np.array([datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc) for ts in trigger_times])
+    time_span = times.max() - times.min()
+    time_span_days = time_span.total_seconds() / 86400.0  # convert to days
+
+    fig, ax_rate = plt.subplots(figsize=(12, 6))
+
+    ax_rate.grid(True, which="both", ls="--", lw=0.35, alpha=0.5)
+
+    weights_total = np.full(times.shape[0], 1.0 / bin_width)
+    _, bin_edges, _ = ax_rate.hist(times, bins=nbins, weights=weights_total, histtype="step", color="k", label="Total Rate",)
+
+    triggers = np.unique(event_info["triggerType"])
+    trigger_colors = {
+        "FORCE": "tab:blue",
+        "RADIANT0": "tab:orange",
+        "RADIANT1": "tab:green",
+        "LT": "tab:red",}
+
+    for trigger in triggers:
+        mask = event_info["triggerType"] == trigger
+        n_mask = mask.sum()
+        if n_mask == 0:
+            continue
+
+        color = trigger_colors.get(trigger)  
+
+        ax_rate.hist(times[mask], bins=bin_edges, weights=np.full(n_mask, 1.0 / bin_width), histtype="step", lw=1.1, label=str(trigger), color=color,)
+
+    ax_rate.set_ylabel("Trigger Rate [Hz]")
+    ax_rate.set_yscale("log")
+
+    if time_span_days < 1:
+        # Use 6h ticks if less than 1 day
+        ax_rate.xaxis.set_major_locator(mdates.HourLocator(interval=6))
+        ax_rate.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d\n%H:%M", tz=timezone.utc))
+    elif time_span_days < 3:
+        # Use 12h ticks if less than 3 days
+        ax_rate.xaxis.set_major_locator(mdates.HourLocator(interval=12))
+        ax_rate.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d\n%H:%M", tz=timezone.utc))
+    else:
+        # Use day ticks otherwise
+        ax_rate.xaxis.set_major_locator(mdates.DayLocator(interval = day_interval))
+        ax_rate.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d", tz = timezone.utc))
+
+    ax_rate.tick_params(axis="x", rotation=25)
+    ax_rate.set_xlabel("Time (UTC)")
+
+    upward, downward, lt = compute_radiant_thresholds(event_info, down_channels, up_channels)
+    scale = 2.5 / 16777215.0  # convert register to Volts
+
+    ax_thr = ax_rate.twinx()
+
+    ax_thr.plot(times, upward * scale, ls="--", lw=2, color="darkmagenta", label="RADIANT Up (avg)",)
+    ax_thr.plot(times, downward * scale, ls="--", lw=2, color="darkgreen", label="RADIANT Down (avg)",)
+    ax_thr.plot(times, lt * scale, ls="--", lw=2, color="mediumblue", label="LT (avg)",)
+
+    ax_thr.set_ylabel("Threshold [V]")
+
+    h1, l1 = ax_rate.get_legend_handles_labels()
+    h2, l2 = ax_thr.get_legend_handles_labels()
+    ax_rate.legend(h1 + h2, l1 + l2, loc="upper left", bbox_to_anchor=(1.1, 1), borderaxespad=0., frameon=True, framealpha=1.0,)
+
+    fig.tight_layout()
+    fig.savefig(os.path.join(save_location, f"trigger_rate_with_thresholds_{station_id}_{run_label}.pdf"))
+
+    return fig, ax_rate, ax_thr
 
 #### Glitching analysis functions ####
 def binomtest_glitch_fraction(glitch_arr, channel_list, alpha=0.01):
@@ -1152,6 +1313,7 @@ if __name__ == "__main__":
     if len(vrms_arr_lt[1]) < 100:
             print(f"!!!! Warning: LT trigger has less than 100 valid Vrms entries ({len(vrms_arr_lt)}). Results for the Vrms statistics may be unreliable. !!!!")
     report_vrms_characteristics(modality_dict_lt, tail_dict_lt, all_channels)
+    plot_vrms_values_against_time(times, vrms_arr, all_channels, station_id, run_label, save_location, n_rows=12, n_cols=2, day_interval=day_interval)
 
     # The Vrms statistics can be misleading (especially for low event number) so the debugging plots are always generated
     debug_plot_vrms_distribution(vrms_arr_force, modality_dict_force, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="force", save_location=save_location, n_rows=12, n_cols=2)
@@ -1174,6 +1336,9 @@ if __name__ == "__main__":
             f"{info['validation']}"
         )
 
+    # Trigger rate with thresholds plot
+    fig_trigger, ax_rate, ax_thr = plot_trigger_rate_with_thresholds(station_id, event_info, downward_channels, upward_channels, run_label, day_interval, bin_width_initial=300, max_bins=800, save_location=save_location)
+    
     # Debug plots
     if args.debug_plot:   
         debug_plot_ratios(ratio_arr_gal, ratio_arr_360, ratio_arr_482, ratio_arr_240, channels_order=channels_order, save_location=save_location, station_id=station_id, run_label=run_label, bins=30,)
