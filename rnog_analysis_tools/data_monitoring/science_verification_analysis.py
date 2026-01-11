@@ -29,7 +29,8 @@ import matplotlib.dates as mdates
 from datetime import timezone
 from scipy.stats import gaussian_kde, skew, binomtest
 from scipy.signal import find_peaks
-
+from matplotlib import colors, cm
+from NuRadioReco.modules.RNO_G.channelBlockOffsetFitter import fit_block_offsets
 
 
 '''
@@ -1051,6 +1052,117 @@ def binomtest_glitch_fraction(glitch_arr, channel_list, alpha=0.01):
 
     return glitch_info
 
+def glitching_violin_plot(glitch_arr, channel_list, station_id, run_label, save_location):
+    data = [glitch_arr[ch] for ch in channel_list]
+    means = np.array([np.mean(glitch_arr[ch]) for ch in channel_list])
+
+    fig, ax = plt.subplots(figsize=(12, 10))
+
+    parts = ax.violinplot(data, positions=channel_list, showextrema=True, showmedians=True, vert=False, side="high", widths=1.8,)
+
+    norm = colors.Normalize(vmin=np.min(means), vmax=np.max(means), clip=False)
+    sm = cm.ScalarMappable(norm=norm, cmap="Blues")
+
+    for idx, pc in enumerate(parts["bodies"]):
+        pc.set_facecolor(sm.to_rgba(means[idx]))
+        pc.set_alpha(0.5)
+        pc.set_edgecolor("k")
+
+    parts["cmins"].set_linewidth(0.2)
+    parts["cmaxes"].set_linewidth(0.2)
+    parts["cbars"].set_linewidth(0.5)
+    parts["cmins"].set_color("k")
+    parts["cmaxes"].set_color("k")
+    parts["cbars"].set_color("k")
+    parts["cmedians"].set_color("k")
+    parts["cmedians"].set_linewidth(1)
+
+    cb = plt.colorbar(sm, ax=ax, pad=0.02)
+    cb.set_label("Mean test statistics")
+
+    ax.set_xlabel("Glitching test statistics")
+    ax.set_ylabel("Channel")
+    ax.set_yticks(channel_list)
+    ax.grid(True, alpha=0.3)
+    ax.set_ylim(min(channel_list) - 1, max(channel_list) + 1)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_location, f"glitching_violin_plot_{station_id}_{run_label}.pdf"))
+    plt.close(fig)
+
+def choose_bin_size(times):
+    total_hours = (times.max() - times.min()).total_seconds() / 3600.0
+    if total_hours < 12:
+        return "30min"
+    elif total_hours < 24:
+        return "1h"
+    elif total_hours < 3 * 24:
+        return "2h"
+    elif total_hours < 7 * 24:
+        return "6h"
+    elif total_hours < 30 * 24:
+        return "12h"
+    else:
+        return "24h"
+
+def plot_glitch_q99_over_time(times, glitch_arr, channels, station_id, run_label, save_location):
+    times = pd.to_datetime(times)
+    df = pd.DataFrame(glitch_arr.T, index=times, columns=channels)
+
+    bin_rule = choose_bin_size(times)
+    q99 = df.resample(bin_rule).quantile(0.99)
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+
+    for ch in channels:
+        ax.plot(q99.index, q99[ch], marker=".", linestyle="-", label=f"ch {ch}")
+
+    ax.set_xlabel("Date [UTC]")
+    ax.set_ylabel(f"99% quantile glitching ts ({bin_rule} bins)")
+    ax.grid(True, alpha=0.3)
+    ax.legend(ncol=3)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_location, f"glitch_q99_{station_id}_{run_label}.pdf"))
+    plt.close(fig)
+
+#### Block offsets ####
+def plot_block_offsets_violin(trace_arr, event_info, channel_list, station_id, run_label, save_location):
+    force_mask = event_info["triggerType"] == "FORCE"
+    trace_arr_force = trace_arr[:, force_mask, :]
+    n_force_events = trace_arr_force.shape[1]
+
+    fit_blocks_flat = []
+
+    for ch in channel_list:
+        traces_force_ch = trace_arr_force[ch] 
+        offsets_ch = np.array([fit_block_offsets(trace, sampling_rate=2.4) for trace in traces_force_ch])
+        fit_blocks_flat.append(offsets_ch.ravel())
+
+    fit_blocks_flat = np.array(fit_blocks_flat)
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    parts = ax.violinplot(fit_blocks_flat.T, positions=channel_list, showextrema=True, showmedians=True, vert=False, side="high", widths=1.8,)
+
+    for pc in parts["bodies"]:
+        pc.set_facecolor("lightblue")
+        pc.set_edgecolor("black")
+        pc.set_alpha(0.7)
+
+    parts["cmedians"].set_color("black")
+    parts["cmedians"].set_linewidth(1.8)
+
+    ax.set_xlabel("Fitted block offset [V]")
+    ax.set_ylabel("Channel")
+    ax.grid(True, alpha=0.3)
+
+    ax.plot(np.nan, np.nan, label=f"{n_force_events} FORCE triggers", color="k")
+    ax.plot(np.nan, np.nan, label="block-offset fit", color="C0")
+    ax.legend(loc="best")
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_location, f"block_offset_violin_{station_id}_{run_label}.pdf"))
+    plt.close(fig)
 
 #### Debug plots ####
 def debug_plot_ratios(ratio_arr_gal, ratio_arr_360, ratio_arr_482, ratio_arr_240, channels_order, save_location, station_id, run_label, bins=30):
@@ -1335,14 +1447,18 @@ if __name__ == "__main__":
             f"CI99%={info['confidence_interval']} | "
             f"{info['validation']}"
         )
+    glitching_violin_plot(glitch_arr, all_channels, station_id, run_label, save_location)
+    plot_glitch_q99_over_time(np.array(times), glitch_arr, all_channels, station_id, run_label, save_location)
 
     # Trigger rate with thresholds plot
     fig_trigger, ax_rate, ax_thr = plot_trigger_rate_with_thresholds(station_id, event_info, downward_channels, upward_channels, run_label, day_interval, bin_width_initial=300, max_bins=800, save_location=save_location)
     
+    # Block offsets plot
+    plot_block_offsets_violin(trace_arr, event_info, all_channels, station_id, run_label, save_location)
+
     # Debug plots
     if args.debug_plot:   
         debug_plot_ratios(ratio_arr_gal, ratio_arr_360, ratio_arr_482, ratio_arr_240, channels_order=channels_order, save_location=save_location, station_id=station_id, run_label=run_label, bins=30,)
         debug_plot_snr_distribution(log_snr_arr, channel_list=all_channels, save_location=save_location, station_id=station_id, run_label=run_label, bins=30)
-        debug_plot_z_score_snr(z_score_arr_log_snr, channel_list=all_channels, save_location=save_location, station_id=station_id, run_label=run_label, bins=30)
-        
+        debug_plot_z_score_snr(z_score_arr_log_snr, channel_list=all_channels, save_location=save_location, station_id=station_id, run_label=run_label, bins=30)   
         
