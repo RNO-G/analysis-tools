@@ -31,7 +31,8 @@ from scipy.stats import gaussian_kde, skew, binomtest
 from scipy.signal import find_peaks
 from matplotlib import colors, cm
 from NuRadioReco.modules.RNO_G.channelBlockOffsetFitter import fit_block_offsets
-
+import builtins
+import csv
 
 '''
 This module can be used to test if the stations are working as expected.
@@ -128,6 +129,27 @@ mpl.rcParams.update({
     'savefig.dpi': 300,
     'savefig.bbox': 'tight',
 })
+
+_print = builtins.print
+_log_file = None
+
+def start_print_logging(path):
+    global _log_file
+    _log_file = open(path, "w")
+
+    def logged_print(*args, **kwargs):
+        _print(*args, **kwargs)  # still print to terminal
+        if _log_file is not None:
+            _print(*args, **kwargs, file=_log_file)
+
+    builtins.print = logged_print
+
+def stop_print_logging():
+    global _log_file
+    if _log_file is not None:
+        _log_file.close()
+        _log_file = None
+    builtins.print = _print
 
 def convert_events_information(event_info, convert_to_arrays=True):
 
@@ -390,14 +412,14 @@ def excess_info_from_ratio(ratio_arr, alpha=0.01, freq_range_str=""):
     print(f"Binomial test for frequency range {freq_range_str}: k={k}, n={n}, pval={pval:.3e}, statistic={statistic:.3f}, 99% CI={confidence_interval}")
 
     if pval > alpha:
-        validation = "NO EXCESS (sign-test)"
+        validation = "NO EXCESS"
     else:
         if confidence_interval.low > 0.75:
-            validation = "STRONG EXCESS (sign-test)"
+            validation = "STRONG EXCESS"
         elif confidence_interval.low > 0.55:
-            validation = "MODERATE EXCESS (sign-test)"
+            validation = "MODERATE EXCESS"
         else: 
-            validation = "WEAK EXCESS (sign-test)"       
+            validation = "WEAK EXCESS"       
 
     return {
         "median_log_ratio": median_log_ratio,
@@ -420,7 +442,7 @@ def validate_excess_in_bands(ratio_arr_gal, ratio_arr_360, ratio_arr_482, ratio_
         "freq_240_272MHz": freq240_info
     }
 
-def plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr, freqs, upward_channels, downward_channels, save_location, run_label):
+def plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label):
     '''Plot time-integrated surface channel spectra.'''
     plt.figure(figsize=(10, 6))
     for ch in upward_channels:
@@ -441,7 +463,7 @@ def plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr, freq
                edgecolor="black")
     plt.grid()
     plt.tight_layout()
-    plt.savefig(os.path.join(save_location, f"time_integrated_surface_spectra_unnormalized_force_trigger_{station_id}_{run_label}.pdf"))
+    plt.savefig(os.path.join(save_location, f"{trigger_label}_time_integrated_surface_spectra_unnormalized_force_trigger_{station_id}_{run_label}.pdf"))
 
 
 def plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr, freqs, upward_channels, downward_channels, save_location, run_label):
@@ -503,7 +525,7 @@ def plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr, f
     plt.tight_layout()
     plt.savefig(os.path.join(save_location, f"time_integrated_surface_spectra_normalized_force_trigger_{station_id}_{run_label}.pdf"))
 
-def plot_time_integrated_deep_spectra(station_id, spec_arr, freqs, vpol_channels, hpol_channels, save_location, run_label):
+def plot_time_integrated_deep_spectra(station_id, spec_arr, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label):
     '''Plot time-integrated deep channel spectra.'''
     plt.figure(figsize=(10, 6))
     for ch in vpol_channels:
@@ -524,7 +546,7 @@ def plot_time_integrated_deep_spectra(station_id, spec_arr, freqs, vpol_channels
                edgecolor="black")
     plt.grid()
     plt.tight_layout()
-    plt.savefig(os.path.join(save_location, f"time_integrated_deep_spectra_unnormalized_force_trigger_{station_id}_{run_label}.pdf"))
+    plt.savefig(os.path.join(save_location, f"{trigger_label}_time_integrated_deep_spectra_unnormalized_force_trigger_{station_id}_{run_label}.pdf"))
 
 #### SNR analysis functions ####
 def calculate_statistics_log_snr(snr_arr):
@@ -765,7 +787,7 @@ def kde_modality(vrms_arr, channel_list, bandwidth=None, grid_points = 512, peak
 
     return modality_dict
 
-def tail_fraction_and_trimmed_skew_two_sided(vrms_arr, channel_list, lower_percentile=25, upper_percentile=75, extreme_k=3):
+def tail_fraction_and_trimmed_skew_two_sided(vrms_arr, channel_list, lower_percentile=25, upper_percentile=75, extreme_k=2):
     '''Calculate tail fraction and two-sided trimmed skewness for Vrms distributions.'''
     tail_dict = {}
 
@@ -807,7 +829,6 @@ def tail_fraction_and_trimmed_skew_two_sided(vrms_arr, channel_list, lower_perce
 
 def report_vrms_characteristics(modality_dict, tail_dict, channel_list):
     for ch in channel_list:
-        # modality from KDE peak count
         n_peaks = modality_dict[ch]["n_peaks"]
         if n_peaks == 0:
             modality = "flat/noisy"
@@ -818,32 +839,55 @@ def report_vrms_characteristics(modality_dict, tail_dict, channel_list):
         else:
             modality = f"multimodal ({n_peaks} peaks)"
 
-        # tail + skewness characteristics
         full_skew   = tail_dict[ch]["full_skew"]
         high_frac   = tail_dict[ch]["high_tail_fraction"]
         low_frac    = tail_dict[ch]["low_tail_fraction"]
         skew_trim_h = tail_dict[ch]["trimmed_skew_high"]
         skew_trim_l = tail_dict[ch]["trimmed_skew_low"]
 
-        # classify tail behavior
-        if 0 < high_frac < 0.01 and full_skew > 0.5 and not np.isnan(skew_trim_h):
+        if np.isnan(full_skew):
+            tail_label = "no significant tails"
+            tail_frac = None
+            if tail_frac is not None:
+                tail_label += f" (fraction: {tail_frac:.3f})"
+            print(f"Ch {ch:02d}: {modality} ({tail_label})")
+            continue
+
+        if not np.isnan(skew_trim_h):
+            dskew_h = full_skew - skew_trim_h
+        else:
+            dskew_h = 0.0
+        if not np.isnan(skew_trim_l):
+            dskew_l = full_skew - skew_trim_l
+        else:
+            dskew_l = 0.0
+
+        strong_skew = 0.3      
+        extreme_skew = 0.5     
+        delta_skew_min = 0.25  
+
+        if 0 < high_frac < 0.01 and full_skew > extreme_skew and dskew_h > delta_skew_min:
             tail_label = "rare high extremes"
             tail_frac = high_frac
-        elif 0.01 <= high_frac < 0.05 and full_skew > 0:
-            tail_label = "moderate high skew"
-            tail_frac = high_frac
-        elif high_frac >= 0.05 and full_skew > 0:
-            tail_label = "bulk high skew"
-            tail_frac = high_frac
-        elif 0 < low_frac < 0.01 and full_skew < -0.5 and not np.isnan(skew_trim_l):
+
+        elif 0 < low_frac < 0.01 and full_skew < -extreme_skew and dskew_l < -delta_skew_min:
             tail_label = "rare low extremes"
             tail_frac = low_frac
-        elif 0.01 <= low_frac < 0.05 and full_skew < 0:
-            tail_label = "moderate low skew"
+
+        elif full_skew > strong_skew:
+            if high_frac < 0.05:
+                tail_label = "moderate high skew"
+            else:
+                tail_label = "bulk high skew"
+            tail_frac = high_frac
+
+        elif full_skew < -strong_skew:
+            if low_frac < 0.05:
+                tail_label = "moderate low skew"
+            else:
+                tail_label = "bulk low skew"
             tail_frac = low_frac
-        elif low_frac >= 0.05 and full_skew < 0:
-            tail_label = "bulk low skew"
-            tail_frac = low_frac
+
         else:
             tail_label = "no significant tails"
             tail_frac = None
@@ -851,9 +895,8 @@ def report_vrms_characteristics(modality_dict, tail_dict, channel_list):
         # output summary
         if tail_frac is not None:
             tail_label += f" (fraction: {tail_frac:.3f})"
-            print(f"Ch {ch:02d}: {modality} ({tail_label})")
-        else: 
-            print(f"Ch {ch:02d}: {modality} ({tail_label})")
+        print(f"Ch {ch:02d}: {modality} ({tail_label})")
+
 
 def plot_vrms_values_against_time(times, vrms_arr_all, channel_list, station_id, run_label, save_location, n_rows = 12, n_cols = 2, day_interval=5):
     '''Plot Vrms distributions for different trigger types.'''
@@ -878,7 +921,7 @@ def plot_vrms_values_against_time(times, vrms_arr_all, channel_list, station_id,
 
     n_channels = len(channel_list)
 
-    fig, axs = plt.subplots(n_rows, n_cols, figsize=(16, 36), sharex=True, squeeze=False)
+    fig, axs = plt.subplots(n_rows, n_cols, figsize=(15, 24), sharex=True, squeeze=False)
     axs = axs.ravel()
 
     legend_handles = {}
@@ -891,7 +934,7 @@ def plot_vrms_values_against_time(times, vrms_arr_all, channel_list, station_id,
             times_trig = times[trig_mask]
             vrms_trig = vrms_ch[trig_mask]
 
-            scatter = ax.scatter(times_trig, vrms_trig, s=8, alpha=0.7, label=trig_name, color=trigger_colors[trig_name])
+            scatter = ax.scatter(times_trig, vrms_trig, s=8, alpha=0.5, label=trig_name, color=trigger_colors[trig_name])
             if trig_name not in legend_handles:
                 legend_handles[trig_name] = scatter
                 
@@ -919,9 +962,9 @@ def plot_vrms_values_against_time(times, vrms_arr_all, channel_list, station_id,
     fig.legend(handles=[legend_handles[k] for k in trigger_masks.keys()], labels=list(trigger_masks.keys()), 
                loc="lower center", ncol=4, frameon=True, markerscale=2, bbox_to_anchor=(0.5, 0.005))
     
-    fig.supxlabel("Date [UTC]", x=0.5, y=0.02)
     fig.supylabel(r"$V_\mathrm{rms}$ [V]", x=0.02)
-    plt.subplots_adjust(bottom=0.05, wspace=0.2, hspace=0.4, left=0.1)
+    plt.subplots_adjust(bottom = 0.05, wspace = 0.15, left=0.1)
+    fig.supxlabel("Date [UTC]", x = 0.5, y = 0.06)
     plt.savefig(os.path.join(save_location, f"vrms_against_time_{station_id}_{run_label}.pdf"))
     plt.close(fig)
 
@@ -1112,7 +1155,7 @@ def plot_glitch_q99_over_time(times, glitch_arr, channels, station_id, run_label
     bin_rule = choose_bin_size(times)
     q99 = df.resample(bin_rule).quantile(0.99)
 
-    fig, ax = plt.subplots(figsize=(12, 5))
+    fig, ax = plt.subplots(figsize=(12, 10))
 
     for ch in channels:
         ax.plot(q99.index, q99[ch], marker=".", linestyle="-", label=f"ch {ch}")
@@ -1120,7 +1163,7 @@ def plot_glitch_q99_over_time(times, glitch_arr, channels, station_id, run_label
     ax.set_xlabel("Date [UTC]")
     ax.set_ylabel(f"99% quantile glitching ts ({bin_rule} bins)")
     ax.grid(True, alpha=0.3)
-    ax.legend(ncol=3)
+    ax.legend(ncol=3, frameon=True, framealpha=0.9, edgecolor="black")
 
     plt.tight_layout()
     plt.savefig(os.path.join(save_location, f"glitch_q99_{station_id}_{run_label}.pdf"))
@@ -1264,6 +1307,182 @@ def debug_plot_vrms_distribution(vrms_arr, modality_dict, channel_list, station_
     plt.tight_layout()
     plt.savefig(os.path.join(save_location,f"debug_vrms_hist_kde_density_peaks_{station_id}_{run_label}_{trigger_label}.pdf",))
 
+def channel_health(row):
+    severity = {"OK": 0, "!!": 1, "X": 2}
+    vals = [severity[v] for v in row if v in severity]
+    if not vals:
+        return "-"
+    inv = {0: "OK", 1: "!!", 2: "X"}
+    return inv[max(vals)]
+
+
+def create_result_csv_file(station_id, run_label, n_events_force, surface_channels, downward_channels, upward_channels, all_channels, validation_results, glitch_info, modality_dict_force, modality_dict_lt, 
+                           modality_dict_radiant0, modality_dict_radiant1, outlier_details, save_location):
+    out_csv_file = os.path.join(save_location, f"validation_summary_station{station_id}_{run_label}.csv")
+    ch_list = list(all_channels)
+
+    spectral_col = []
+    glitch_col = []
+    modality_force_col = []
+    modality_lt_col = []
+    modality_radiant0_col = []
+    modality_radiant1_col = []
+    snr_col = []
+
+    for ch in ch_list:
+        df_spec_val = ""
+        if ch in surface_channels:
+            spectral_validation = None
+            vr = validation_results.get(ch, {})
+            gal = vr.get("galactic_excess", {})
+            spectral_validation = gal.get("validation", None)
+
+            if spectral_validation is None:
+                df_spec_val = "?"
+            else:
+                if ch in downward_channels:
+                    print(f"spectral_validation: {spectral_validation}")
+                    if spectral_validation == "NO EXCESS":
+                        df_spec_val = "OK"
+                    elif spectral_validation == "WEAK EXCESS":
+                        df_spec_val = "!!"
+                    elif spectral_validation in ["MODERATE EXCESS", "STRONG EXCESS"]:
+                        df_spec_val = "X"
+                    else:
+                        df_spec_val = "?"
+                elif ch in upward_channels:
+                    print(f"spectral_validation: {spectral_validation}")
+                    if spectral_validation in ["STRONG EXCESS", "MODERATE EXCESS"]:
+                        df_spec_val = "OK"
+                    elif spectral_validation == "WEAK EXCESS":
+                        df_spec_val = "!!"
+                    elif spectral_validation == "NO EXCESS":
+                        df_spec_val = "X"
+                    else:
+                        df_spec_val = "?"
+                else:
+                    df_spec_val = "?"
+        else:
+            df_spec_val = "-"
+
+        spectral_col.append(df_spec_val)
+
+        # Glitching column
+        if glitch_info is None:
+            glitch_val = "-"
+            glitch_col.append(glitch_val)
+        else:
+            info = glitch_info.get(ch, None)
+            glitch_val_raw = info.get("validation") if info is not None else "-"
+            if glitch_val_raw == "NO EXCESSIVE GLITCHING":
+                glitch_val = "OK"
+            elif glitch_val_raw == "WEAK EXCESSIVE GLITCHING":
+                glitch_val = "!!"
+            elif glitch_val_raw in ["MODERATE EXCESSIVE GLITCHING", "STRONG EXCESSIVE GLITCHING"]:
+                glitch_val = "X"
+            else:
+                glitch_val = "-"
+            glitch_col.append(glitch_val)
+
+        # Vrms analysis column
+        if modality_dict_force is None:
+            modality_value = "-"
+            modality_force_col.append(modality_value)
+        else:
+            n_peaks = modality_dict_force[ch]["n_peaks"]
+            if n_peaks == 0:
+                modality_value = "!!"
+            elif n_peaks == 1:
+                modality_value = "OK"
+            elif n_peaks == 2:
+                modality_value = "X"
+            else:
+                modality_value = f"X"
+            modality_force_col.append(modality_value)
+
+        if modality_dict_lt is None:
+            modality_value = "-"
+            modality_lt_col.append(modality_value)
+        else:
+            n_peaks = modality_dict_lt[ch]["n_peaks"]
+            if n_peaks == 0:
+                modality_value = "!!"
+            elif n_peaks == 1:
+                modality_value = "OK"
+            elif n_peaks == 2:
+                modality_value = "X"
+            else:
+                modality_value = f"X"
+            modality_lt_col.append(modality_value)
+
+        if modality_dict_radiant0 is None:
+            modality_value = "-"
+            modality_radiant0_col.append(modality_value)
+        else:
+            n_peaks = modality_dict_radiant0[ch]["n_peaks"]
+            if n_peaks == 0:
+                modality_value = "!!"
+            elif n_peaks == 1:
+                modality_value = "OK"
+            elif n_peaks == 2:
+                modality_value = "X"
+            else:
+                modality_value = "X"
+            modality_radiant0_col.append(modality_value)
+        if modality_dict_radiant1 is None:
+            modality_value = "-"
+            modality_radiant1_col.append(modality_value)
+        else:
+            n_peaks = modality_dict_radiant1[ch]["n_peaks"]
+            if n_peaks == 0:
+                modality_value = "!!"
+            elif n_peaks == 1:
+                modality_value = "OK"
+            elif n_peaks == 2:
+                modality_value = "X"
+            else:
+                modality_value = "X"
+            modality_radiant1_col.append(modality_value)
+
+        # SNR validation column
+        outlier_ch_info = outlier_details.get(ch, [])
+        n_out = len(outlier_ch_info)
+        if n_out == 0:
+            snr_value = "OK"
+        else:
+            max_delta = max(abs(o.get("z_minus_k", 0.0)) for o in outlier_ch_info)
+            frac_out = n_out / n_events_force if n_events_force > 0 else 0.0
+            if max_delta < 3.0:
+                snr_value = "OK"
+
+            elif max_delta < 5.0:
+                snr_value = "OK" if frac_out < 0.01 else "!!"
+
+            else:  # max_delta >= 5
+                if n_out == 1 and frac_out < 0.001:
+                    snr_value = "OK"
+                elif frac_out < 0.01:
+                    snr_value = "!!"
+                else:
+                    snr_value = "X"
+        snr_col.append(snr_value)
+
+    df = pd.DataFrame({
+        "Channel": ch_list,
+        "SNR": snr_col,
+        "Galaxy (FORCE)": spectral_col,
+        "Vrms (FORCE)": modality_force_col,
+        "Vrms (LT)": modality_lt_col,
+        "Vrms (RADIANT0)": modality_radiant0_col,
+        "Vrms (RADIANT1)": modality_radiant1_col,
+        "Glitching": glitch_col,
+    })
+
+    health_cols =["SNR", "Galaxy (FORCE)", "Vrms (FORCE)", "Vrms (LT)", "Vrms (RADIANT0)", "Vrms (RADIANT1)", "Glitching"]
+    df["Channel Health"] = df[health_cols].apply(channel_health, axis=1)
+    df.to_csv(out_csv_file, index=False)
+    print(f"Validation summary saved to {out_csv_file}")
+
 
 if __name__ == "__main__":
 
@@ -1272,7 +1491,7 @@ if __name__ == "__main__":
     argparser.add_argument("-b", "--backend", type=str, default="pyroot", help="Backend to use for reading data, should be either pyroot or uproot (default: pyroot), e.g. --backend pyroot or --backend uproot")
     argparser.add_argument("-sl", "--save_location", type=str, default=".", help="Location to save the output plots (default: current directory), e.g. --save_location /path/to/save/plots")
     argparser.add_argument("-ex", "--exclude-runs", nargs="+", type=int, default=[], metavar="RUN", help="Run number(s) to exclude, e.g. --exclude-runs 1005 1010")
-    argparser.add_argument("--debug_plot", action="store_true", help="If set, will create debug plots for amplitude ratios in frequency bands.")
+    argparser.add_argument("--debug_plot", action="store_true", help="If set, will create debug plots.")
 
     run_selection = argparser.add_mutually_exclusive_group(required=True)
     run_selection.add_argument("--runs", nargs="+", type=int, metavar="RUN_NUMBERS",
@@ -1322,12 +1541,15 @@ if __name__ == "__main__":
     save_location = os.path.expanduser(args.save_location)
     os.makedirs(save_location, exist_ok=True)
 
+    result_txt = os.path.join(save_location, f"result_station{station_id}_{run_label}.txt")
+    start_print_logging(result_txt)
+
     # Read data
     spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info, glitch_arr = read_rnog_data(station_id, run_numbers, backend=backend) 
 
     # Normalize surface channel spectra
     norm_spec_arr, scale_factors = normalize_channels(spec_arr, freqs, downward_channels, upward_channels)
-    print(f"Event info trigger type: {event_info['triggerType']}, event info trigger type length: {len(event_info['triggerType'])}")
+    print(f"Event info trigger type: {event_info['triggerType']}")
     print(f"Spec arr shape: {spec_arr.shape}, Norm spec arr shape: {norm_spec_arr.shape}")
 
     # Select FORCE trigger events
@@ -1346,6 +1568,7 @@ if __name__ == "__main__":
     ch_to_idx = {ch: i for i, ch in enumerate(channels_order)}
     print(ch_to_idx)
 
+    all_validation_results = {}
     for ch in surface_channels:
         print(f"\nAnalyzing channel {ch}")
         i = ch_to_idx[ch]
@@ -1358,6 +1581,7 @@ if __name__ == "__main__":
             ratio_arr_240[i],
             alpha=0.01
         )
+        all_validation_results[ch] = validation_results
 
         for band, results in validation_results.items():
             print(f"=== {band} ===")
@@ -1365,13 +1589,30 @@ if __name__ == "__main__":
                 print(f"{key}: {value}")
             print("==============")
 
+    lt_mask = choose_trigger_type(event_info, "LT")
+    spec_arr_lt = spec_arr[:, lt_mask, :]
+
+    radiant0_mask = choose_trigger_type(event_info, "RADIANT0")
+    spec_arr_radiant0 = spec_arr[:, radiant0_mask, :]
+
+    radiant1_mask = choose_trigger_type(event_info, "RADIANT1")
+    spec_arr_radiant1 = spec_arr[:, radiant1_mask, :]       
+
     # Surface spectrum
-    plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_force, freqs, upward_channels, downward_channels, save_location, run_label)
+    plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_force, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label="force")
+    plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_lt, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label="lt")
+    plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_radiant0, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label="radiant0")
+    plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_radiant1, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label="radiant1")
+    
+    # Normalized surface spectrum - only force
     plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr_force, freqs, upward_channels, downward_channels, save_location, run_label)
 
     # Deep spectrum (unnormalized)
-    plot_time_integrated_deep_spectra(station_id, spec_arr_force, freqs, vpol_channels, hpol_channels, save_location, run_label)
-
+    plot_time_integrated_deep_spectra(station_id, spec_arr_force, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label="force")
+    plot_time_integrated_deep_spectra(station_id, spec_arr_lt, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label="lt")
+    plot_time_integrated_deep_spectra(station_id, spec_arr_radiant0, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label="radiant0")
+    plot_time_integrated_deep_spectra(station_id, spec_arr_radiant1, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label="radiant1")
+    
     # SNR analysis
     snr_arr_force = snr_arr[:, force_mask]
     event_info_force = {key: np.array(value)[force_mask] for key, value in event_info.items()}
@@ -1396,6 +1637,7 @@ if __name__ == "__main__":
 
     # Vrms analysis
     vrms_arr, vrms_arr_force, vrms_arr_radiant0, vrms_arr_radiant1, vrms_arr_lt = calculate_vrms(trace_arr, event_info)
+    print(f"Number of RADIANT0 trigger events: {len(vrms_arr_radiant0[1])}, Number of RADIANT1 trigger events: {len(vrms_arr_radiant1[1])}, Number of LT trigger events: {len(vrms_arr_lt[1])}")
 
     modality_dict_force = kde_modality(vrms_arr_force, all_channels, bandwidth=None, grid_points=512, peak_prominence=0.01)
     tail_dict_force = tail_fraction_and_trimmed_skew_two_sided(vrms_arr_force, all_channels, lower_percentile=25, upper_percentile=75, extreme_k=3)
@@ -1409,7 +1651,6 @@ if __name__ == "__main__":
     print("\nVrms characteristics for RADIANT0 trigger events:")
     if len(vrms_arr_radiant0[1]) < 100:
             print(f"!!!! Warning: RADIANT0 trigger has less than 100 valid Vrms entries ({len(vrms_arr_radiant0)}). Results for the Vrms statistics may be unreliable. !!!!")
-    report_vrms_characteristics(modality_dict_force, tail_dict_force, all_channels)
     report_vrms_characteristics(modality_dict_radiant0, tail_dict_radiant0, all_channels)
 
     modality_dict_radiant1 = kde_modality(vrms_arr_radiant1, all_channels, bandwidth=None, grid_points=512, peak_prominence=0.01)
@@ -1462,3 +1703,25 @@ if __name__ == "__main__":
         debug_plot_snr_distribution(log_snr_arr, channel_list=all_channels, save_location=save_location, station_id=station_id, run_label=run_label, bins=30)
         debug_plot_z_score_snr(z_score_arr_log_snr, channel_list=all_channels, save_location=save_location, station_id=station_id, run_label=run_label, bins=30)   
         
+    stop_print_logging()
+
+    # Create summary CSV file
+    n_events_force = spec_arr_force.shape[1]
+    create_result_csv_file(
+        station_id,
+        run_label,
+        n_events_force,
+        surface_channels,
+        downward_channels,
+        upward_channels,
+        all_channels,
+        all_validation_results,
+        glitch_info,
+        modality_dict_force,
+        modality_dict_lt,
+        modality_dict_radiant0,
+        modality_dict_radiant1,
+        outlier_details_snr,
+        save_location,
+    )
+    
