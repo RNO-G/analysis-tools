@@ -121,8 +121,7 @@ if __name__ == "__main__":
     argparser.add_argument("-sl", "--save_location", type=str, default=".", help="Location to save the output plots (default: current directory), e.g. --save_location /path/to/save/plots")
     argparser.add_argument("-ex", "--exclude-runs", nargs="+", type=int, default=[], metavar="RUN", help="Run number(s) to exclude, e.g. --exclude-runs 1005 1010")
     argparser.add_argument("--save_values", action="store_true", help="If set, will save the snr reference values to separate JSON files in the script directory.")
-    argparser.add_argument("-sl", "--save_location", type=str, default=".", help="Location to save the output plots (default: current directory), e.g. --save_location /path/to/save/plots")
-
+    
     run_selection = argparser.add_mutually_exclusive_group(required=True)
     run_selection.add_argument("--runs", nargs="+", type=int, metavar="RUN_NUMBERS",
                            help="Run number(s) to analyze. Each run number should be given explicitly separated by a space, e.g. --runs 1001 1002 1005")
@@ -171,7 +170,7 @@ if __name__ == "__main__":
     save_location = os.path.expanduser(args.save_location)
     os.makedirs(save_location, exist_ok=True)
 
-    spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info = read_rnog_data(station_id, run_numbers, backend=backend) 
+    spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info, glitch_arr = read_rnog_data(station_id, run_numbers, backend=backend) 
 
     # Choose FORCE triggered events only
     force_mask = choose_trigger_type(event_info, "FORCE")
@@ -198,4 +197,4 @@ if __name__ == "__main__":
     print_outlier_summary(outlier_details_snr)
 
     day_interval = choose_day_interval(times)
-    plot_snr_against_time(station_id, times_force, snr_arr_force, flag_outliers_snr, z_score_arr_log_snr, k_values_log_snr, all_channels, nrows=12, ncols=2, day_interval=day_interval)
+    plot_snr_against_time(station_id, times_force, snr_arr_force, flag_outliers_snr, z_score_arr_log_snr, k_values_log_snr, all_channels, save_location, run_label, nrows=12, ncols=2, day_interval=day_interval)
