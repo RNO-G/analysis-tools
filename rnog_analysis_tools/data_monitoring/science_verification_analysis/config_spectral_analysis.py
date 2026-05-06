@@ -1,4 +1,4 @@
-from NuRadioMC.utilities import units
+from NuRadioReco.utilities import units
 
 SPECTRAL_BANDS = {
     "galactic_excess": {"freq_min": 80*units.MHz, "freq_max": 120*units.MHz},

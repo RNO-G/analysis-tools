@@ -1,6 +1,6 @@
 import numpy as np
 from NuRadioReco.utilities import units
-from scipy.signal import binomtest
+from scipy.stats import binomtest
 import logging
 
 logger = logging.getLogger(__name__)

@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 def setup_logging(station_id, run_label):
     os.makedirs("logs", exist_ok=True)
 
-    log_file = os.path.join("logs", f"science_verification_analysis_station{station_id}_{run_label}.log")
+    log_file = os.path.join("logs", f"logging_science_verification_analysis_station{station_id}_{run_label}.log")
 
     logging.basicConfig(
         level=logging.INFO,
@@ -873,19 +873,24 @@ def plot_block_offsets_violin(trace_arr, event_info, channel_list, station_id, r
     plt.close(fig)
 
 #### Debug plots ####
-def debug_plot_ratios(ratio_arr_gal, ratio_arr_360, ratio_arr_482, ratio_arr_240, channels_order, save_location, station_id, run_label, bins=30):
-    fig, axes = plt.subplots(1, 4, figsize=(20, 5), sharey=True)
-    bands = [("80–120 MHz  (FORCE Trigger)", ratio_arr_gal),
-             ("360–380 MHz  (FORCE Trigger)", ratio_arr_360),
-             ("482–485 MHz  (FORCE Trigger)", ratio_arr_482),
-             ("240–272 MHz  (FORCE Trigger)", ratio_arr_240)]
+def debug_plot_ratios(ratio_arr_dict, channels_order, save_location, station_id, run_label, bins=30):
+    n_bands = len(ratio_arr_dict)
+    
+    fig, axes = plt.subplots(1, n_bands, figsize=(5*n_bands, 5), sharey=True)
+    
+    if n_bands == 1:
+        axes = [axes]
 
-    for ax, (title, ratio_list) in zip(axes, bands):
+    for ax, (band_name, ratio_list) in zip(axes, ratio_arr_dict.items()):
         for ch, r in zip(channels_order, ratio_list):
             r = np.asarray(r)
             ax.hist(np.log10(r), bins=bins, histtype="step", linewidth=1.3, label=f"Ch {ch}", alpha=0.8)
 
-        ax.set_title(title)
+        ax.set_title(band_name)
+        ax.set_xlabel("log10(R)")
+        ax.grid(True, alpha=0.3)
+
+        ax.set_title(f"{band_name} (FORCE Trigger)")
         ax.set_xlabel("log10(R)")
         ax.grid(True, alpha=0.3)
 
@@ -999,8 +1004,7 @@ def create_result_csv_file(station_id, run_label, n_events_force, surface_channe
         if ch in surface_channels:
             spectral_validation = None
             vr = validation_results.get(ch, {})
-            gal = vr.get("galactic_excess", {})
-            spectral_validation = gal.get("validation", None)
+            spectral_validation = vr.get("galactic_excess", {})
 
             if spectral_validation is None:
                 df_spec_val = "?"
@@ -1146,6 +1150,17 @@ def create_result_csv_file(station_id, run_label, n_events_force, surface_channe
     df.to_csv(out_csv_file, index=False)
     logger.info(f"Validation summary saved to {out_csv_file}")
 
+def write_spectral_results(ch, excess_info_results, station_id, run_label):
+    os.makedirs("detailed_results", exist_ok=True)
+    spectral_results_file = os.path.join("detailed_results", f"spectral_analysis_results_{station_id}_{run_label}.txt")
+    with open(spectral_results_file, "a") as f:
+        f.write(f"Channel {ch:02d}:\n")
+        for band, results in excess_info_results.items():
+            f.write(f"\n=== {band} ===\n")
+            for key, value in results.items():
+                f.write(f"{key}: {value}\n")
+        f.write("\n")
+    logger.info(f"Spectral analysis results for channel {ch:02d} written to {spectral_results_file}")
 
 if __name__ == "__main__":
 
@@ -1251,7 +1266,7 @@ if __name__ == "__main__":
         else:
             logger.error(f"Unknown band name {band_name} in SPECTRAL_BANDS config")
             raise ValueError(f"Unknown band name {band_name} in SPECTRAL_BANDS config")
-
+        
     logger.debug(f"Band configuration for spectral analysis: {band_config}")
 
     ratio_arr_dict = find_amplitude_ratio_in_band_specific_bkg(freqs, norm_spec_arr_force, upward_channels, downward_channels, **band_config)
@@ -1263,8 +1278,8 @@ if __name__ == "__main__":
     all_excess_info = {}
     all_validation_results = {}
 
+    logger.info("Starting spectral analysis for FORCE trigger events...")
     for ch in surface_channels:
-        logger.info(f"\nAnalyzing spectral excess for channel {ch}...")
         i = ch_to_idx[ch]
         ratio_arr_dict_ch = {}
 
@@ -1277,15 +1292,8 @@ if __name__ == "__main__":
         all_excess_info[ch] = excess_info_results
         all_validation_results[ch] = validation_results
 
-        for band, results in excess_info_results.items():
-            summary = "\n".join(
-                [f"{key}: {value}" for key, value in results.items()]
-            )
-            logger.info(
-                f"\n=== {band} ===\n"
-                f"{summary}\n"
-                f"=============="
-            )
+        # Write detailed spectral results to text file for each channel
+        write_spectral_results(ch, excess_info_results, station_id, run_label)
 
     # Select other trigger types and plot them
     lt_mask = choose_trigger_type(event_info, "LT")
@@ -1402,7 +1410,7 @@ if __name__ == "__main__":
 
     # Debug plots
     if args.debug_plot:   
-        debug_plot_ratios(ratio_arr_gal, ratio_arr_360, ratio_arr_482, ratio_arr_240, channels_order=channels_order, save_location=save_location, station_id=station_id, run_label=run_label, bins=30,)
+        debug_plot_ratios(ratio_arr_dict=ratio_arr_dict, channels_order=channels_order, save_location=save_location, station_id=station_id, run_label=run_label, bins=30,)
         debug_plot_snr_distribution(log_snr_arr, channel_list=all_channels, save_location=save_location, station_id=station_id, run_label=run_label, bins=30)
         debug_plot_z_score_snr(z_score_arr_log_snr, channel_list=all_channels, save_location=save_location, station_id=station_id, run_label=run_label, bins=30)   
         
