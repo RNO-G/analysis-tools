@@ -2,29 +2,15 @@
 This module can be used to test if the stations are working as expected.
 '''
 
-from NuRadioReco.modules.io.RNO_G.readRNOGDataMattak import readRNOGData
 import rnog_data.runtable as rt
-from NuRadioReco.detector import detector
 import logging
 import os
 import datetime
 import numpy as np
 from matplotlib import pyplot as plt
 from NuRadioReco.utilities import units
-from tqdm import tqdm
 from argparse import ArgumentParser
 import pandas as pd
-import NuRadioReco.framework.event
-import NuRadioReco.framework.station
-import NuRadioReco.framework.channel
-import NuRadioReco.framework.trigger
-from NuRadioReco.framework.parameters import channelParameters as chp
-from NuRadioReco.modules.RNO_G.dataProviderRNOG import dataProviderRNOG
-from NuRadioReco.framework.parameters import channelParametersRNOG as chp_rnog
-from cycler import cycler
-import matplotlib as mpl
-#from cmap import Colormap
-from collections import defaultdict
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from scipy.stats import skew
@@ -35,22 +21,36 @@ from scipy.stats import gaussian_kde, skew, binomtest
 from scipy.signal import find_peaks
 from matplotlib import colors, cm
 from NuRadioReco.modules.RNO_G.channelBlockOffsetFitter import fit_block_offsets
-import builtins
-import csv
 from config_station import get_station_config
 from config_plotting import set_plot_style
 from read_rnog_data_nuradio import convert_events_information, read_rnog_data
 from spectral_analysis_sva import find_amplitude_ratio_in_band, find_amplitude_ratio_in_band_specific_bkg, excess_info_from_ratio, excess_info_from_ratio_specific_bkg, validate_excess_in_bands
-from config_spectral_analysis import SPECTRAL_BANDS, ALPHA_SPEC, CI_THRESHOLDS_SPEC
+from config_spectral_analysis import SPECTRAL_BANDS, ALPHA_SPEC, CI_THRESHOLDS_SPEC, NORMALIZATION_BAND
 import copy
+from snr_analysis_sva import calculate_statistics_log_snr, calculate_z_score_snr, symmetry_metrics_channel_z_score, symmetry_metrics_z_score, load_values_json, outlier_flag, find_outlier_details
+from vrms_analysis_sva import calculate_vrms, kde_modality, tail_fraction_and_trimmed_skew_two_sided, report_vrms_characteristics
+from config_vrms import kde_modality_function_parameters, skewness_function_parameters, report_vrms_function_parameters
 
-# Logging
+#### Script directory for json files
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+#### Output directories for plots, results, and logs
+PLOTS_DIR = os.path.join(SCRIPT_DIR, "plots")
+RESULTS_DIR = os.path.join(SCRIPT_DIR, "detailed_results")
+CSV_DIR = os.path.join(SCRIPT_DIR, "channel_health_summary")
+LOGS_DIR = os.path.join(SCRIPT_DIR, "logs")
+# Create output directories if they don't exist
+os.makedirs(RESULTS_DIR, exist_ok=True)
+os.makedirs(PLOTS_DIR, exist_ok=True)
+os.makedirs(CSV_DIR, exist_ok=True)
+os.makedirs(LOGS_DIR, exist_ok=True)
+
+#### Logging
 logger = logging.getLogger(__name__)
 
 def setup_logging(station_id, run_label):
-    os.makedirs("logs", exist_ok=True)
 
-    log_file = os.path.join("logs", f"logging_science_verification_analysis_station{station_id}_{run_label}.log")
+    log_file = os.path.join(LOGS_DIR, f"logging_science_verification_analysis_station{station_id}_{run_label}.log")
 
     logging.basicConfig(
         level=logging.INFO,
@@ -64,18 +64,17 @@ def setup_logging(station_id, run_label):
 
     logger.info(f"Logging to {log_file}")
 
-# Script directory for json files
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# Choose events based on trigger type
+#### Choose events based on trigger type
 def choose_trigger_type(event_info, trigger_type: str):
     '''Choose events based on trigger type.'''
     mask = event_info["triggerType"] == trigger_type
 
     return mask
 
-# Normalize surface channel spectra to the average of the down channels in the reference frequency band (500-650 MHz)
-def normalize_channels(spec_arr, frequencies, down_channels, up_channels, f_low=500*units.MHz, f_high=650*units.MHz):
+#### Normalize surface channel spectra to the average of the down channels in the reference frequency band (500-650 MHz)
+def normalize_channels(spec_arr, frequencies, down_channels, up_channels):
+    f_low=NORMALIZATION_BAND["freq_min"]
+    f_high=NORMALIZATION_BAND["freq_max"]
     '''Normalize all surface channel spectra to the average of the down channels in the reference frequency band. The reference band is 500-650 MHz by default. This will be replaced by lab measurements in the future.'''
     # spec_arr shape: (n_channels, n_events, n_freqs)
     freq_mask = (frequencies >= f_low) & (frequencies <= f_high)
@@ -102,7 +101,6 @@ def read_rnog_runtable(station_id: int, start_time: str, stop_time: str):
     RunTable = rt.RunTable()
     testrt = RunTable.get_table( start_time=start_time, stop_time=stop_time, stations=[station_id], run_types = ['physics'])
     return testrt
-
 
 def plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label):
     '''Plot time-integrated surface channel spectra.'''
@@ -213,117 +211,7 @@ def plot_time_integrated_deep_spectra(station_id, spec_arr, freqs, vpol_channels
     plt.tight_layout()
     plt.savefig(os.path.join(save_location, f"{trigger_label}_time_integrated_deep_spectra_unnormalized_{station_id}_{run_label}.pdf"))
 
-#### SNR analysis functions ####
-def calculate_statistics_log_snr(snr_arr):
-    '''Calculate log10 statistics (mean, median, std, mean-median) for SNR values.'''
-    log_snr_arr = np.zeros((len(snr_arr), len(snr_arr[0])))
-    for ch in range(len(snr_arr)):
-        snr_arr_ch = snr_arr[ch]
-        log_snr_arr_ch = np.log10(snr_arr_ch)
-        log_snr_arr[ch, :] = log_snr_arr_ch
-    log_mean_dict = {}
-    log_median_dict = {}
-    log_std_dict = {}
-    log_difference_dict = {}
-
-    for ch in range(len(log_snr_arr)):
-        log_mean_dict[ch] = np.mean(log_snr_arr[ch])
-        log_median_dict[ch] = np.median(log_snr_arr[ch])
-        log_std_dict[ch] = np.std(log_snr_arr[ch])
-        log_difference_dict[ch] = np.mean(log_snr_arr[ch]) - np.median(log_snr_arr[ch])
-
-    return log_snr_arr, log_mean_dict, log_median_dict, log_std_dict, log_difference_dict
-def calculate_z_score_snr(snr_arr, ref_mean_dict, ref_std_dict, channel_list):
-    '''Calculate the z-score for SNR values given mean and standard deviation lists for each channel.'''
-    z_score_arr = np.zeros((len(snr_arr), len(snr_arr[0])))
-    for ch in channel_list:
-        snr_arr_ch = snr_arr[ch]
-        mean_ch = ref_mean_dict[ch]
-        std_ch = ref_std_dict[ch]
-        z_score_arr_ch = (snr_arr_ch - mean_ch) / std_ch
-        z_score_arr[ch,:] = z_score_arr_ch
-
-    return z_score_arr
-
-def symmetry_metrics_channel_z_score(z_score):
-    return {
-        "mean": np.mean(z_score),
-        "median": np.median(z_score),
-        "skew": skew(z_score, bias=False),
-        "p_pos_3": np.mean(z_score > 3),
-        "p_neg_3": np.mean(z_score < -3),
-        "p_pos_5": np.mean(z_score > 5),
-        "p_neg_5": np.mean(z_score < -5),
-    }
-def symmetry_metrics_z_score(z_score):
-    metrics = {}
-    for ch in range(len(z_score)):
-        z_score_ch = z_score[ch]
-        metrics[f"ch_{ch}"] = symmetry_metrics_channel_z_score(z_score_ch)
-    return metrics
-
-def load_values_json(filename):
-    ''' Load k-values from a JSON file.'''
-    if not os.path.isabs(filename):
-        filepath = os.path.join(SCRIPT_DIR, filename)
-    else:
-        filepath = filename
-    with open(filepath, "r") as f:
-        data = json.load(f)     
-    values = {int(ch): float(k) for ch, k in data.items()}
-
-    return values
-
-def outlier_flag(z_score_log, k_values_log, channel_list):
-    '''Flag outlier events based on the k-values for each channel.'''
-    flag = np.zeros((len(channel_list), len(z_score_log[0])), dtype=bool)
-    for ch in channel_list:
-        flag[ch, :] = np.abs(z_score_log[ch]) > k_values_log[ch]
-
-    return flag
-
-def find_outlier_details(z_score_log, k_values_log, flag, event_info, channel_list):
-    '''Find details of outlier events for each channel.'''
-    outlier_details = {}
-
-    for ch in channel_list:
-        outlier_indices = np.where(flag[ch, :])[0]
-        details_ch = []
-        for idx in outlier_indices:
-            z_abs = np.abs(z_score_log[ch, idx])
-            k_ch = k_values_log[ch]
-            delta = z_abs - k_ch
-
-            details_ch.append({
-                "run": int(event_info["run"][idx]),
-                "eventNumber": int(event_info["eventNumber"][idx]),
-                "z_abs": float(z_abs),
-                "k": float(k_ch),
-                "z_minus_k": float(delta),
-            })
-
-        outlier_details[ch] = details_ch
-
-    return outlier_details
-
-def print_outlier_summary(outlier_details):
-    '''Print a summary of outlier events for each channel.'''
-    for ch in sorted(outlier_details.keys()):
-        entries = outlier_details[ch]
-        n_outliers = len(entries)
-
-        if n_outliers == 0:
-            logger.info(f"Channel {ch}: 0 outliers")
-            continue
-
-        k_ch = entries[0]["k"]
-        logger.info(f"Channel {ch}: {n_outliers} outliers (k = {k_ch:.2f})")
-
-        for e in entries:
-            logger.info(f"  - run {e['run']}, event {e['eventNumber']}, "
-                         f"|z| = {e['z_abs']:.2f} (delta = {e['z_minus_k']:.2f} above k)")
-            
-            
+#### SNR analysis functions ####       
 def choose_day_interval(times):
     times = pd.to_datetime(times, utc=True)
     total_days = (times.max() - times.min()).days
@@ -405,164 +293,6 @@ def plot_snr_against_time(station_id,times,snr_arr,flag,z_log,k_list,channels,sa
             
 
 #### Vrms analysis functions ####
-def calculate_vrms(trace_arr, event_info):
-    '''Calculate Vrms for each channel and event according to trigger types.'''
-    vrms_arr = np.std(trace_arr, axis=2)  # (n_channels, n_events)
-
-    force_mask = event_info["triggerType"] == "FORCE"
-    radiant0_mask = event_info["triggerType"] == "RADIANT0"
-    radiant1_mask = event_info["triggerType"] == "RADIANT1"
-    lt_mask = event_info["triggerType"] == "LT"
-
-    vrms_arr_force = vrms_arr[:, force_mask]
-    vrms_arr_radiant0 = vrms_arr[:, radiant0_mask]
-    vrms_arr_radiant1 = vrms_arr[:, radiant1_mask]
-    vrms_arr_lt = vrms_arr[:, lt_mask]
-
-    return vrms_arr, vrms_arr_force, vrms_arr_radiant0, vrms_arr_radiant1, vrms_arr_lt
-
-def kde_modality(vrms_arr, channel_list, bandwidth=None, grid_points = 512, peak_prominence=0.01):
-    '''Calculate KDE and modality for Vrms distributions.'''
-
-    modality_dict = {}
-
-    for ch in channel_list:
-        vrms_ch = vrms_arr[ch]
-        vrms_ch = vrms_ch[~np.isnan(vrms_ch)]
-
-        kde = gaussian_kde(vrms_ch, bw_method=bandwidth)
-        vrms_min = np.min(vrms_ch)
-        vrms_max = np.max(vrms_ch)
-        vrms_grid = np.linspace(vrms_min, vrms_max, grid_points)
-        kde_values = kde(vrms_grid)
-
-        # Adjust prominence to be relative to the KDE range
-        abs_prom = peak_prominence * (np.max(kde_values) - np.min(kde_values))
-
-        peaks, properties = find_peaks(kde_values, prominence=abs_prom, height=0.05*np.max(kde_values))
-
-        modality_dict[ch] = {
-            "kde": kde,
-            "vrms_grid": vrms_grid,
-            "kde_values": kde_values,
-            "n_peaks": len(peaks),
-            "peaks": peaks,
-            "prominences": properties["prominences"],
-        }
-
-    return modality_dict
-
-def tail_fraction_and_trimmed_skew_two_sided(vrms_arr, channel_list, lower_percentile=25, upper_percentile=75, extreme_k=2):
-    '''Calculate tail fraction and two-sided trimmed skewness for Vrms distributions.'''
-    tail_dict = {}
-
-    for ch in channel_list:
-        vrms_ch = vrms_arr[ch]
-        vrms_ch = vrms_ch[~np.isnan(vrms_ch)]
-        n_events = len(vrms_ch)
-
-        full_skew = skew(vrms_ch, bias=False)
-
-        q1, q3 = np.percentile(vrms_ch, [lower_percentile, upper_percentile])
-        iqr = q3 - q1
-
-        lower_bound = q1 - extreme_k * iqr
-        upper_bound = q3 + extreme_k * iqr
-
-        high_mask = vrms_ch > upper_bound
-        high_frac = np.mean(high_mask)
-
-        low_mask = vrms_ch < lower_bound
-        low_frac = np.mean(low_mask)
-
-        core_high = vrms_ch[~high_mask]
-        skew_trim_high = skew(core_high, bias=False) if len(core_high) > 10 else np.nan
-
-        core_low = vrms_ch[~low_mask]
-        skew_trim_low = skew(core_low, bias=False) if len(core_low) > 10 else np.nan
-
-        tail_dict[ch] = {
-            "n_events": n_events,
-            "full_skew": full_skew,
-            "high_tail_fraction": high_frac,
-            "low_tail_fraction": low_frac,
-            "trimmed_skew_high": skew_trim_high,
-            "trimmed_skew_low": skew_trim_low,
-        }
-
-    return tail_dict
-
-def report_vrms_characteristics(modality_dict, tail_dict, channel_list):
-    for ch in channel_list:
-        n_peaks = modality_dict[ch]["n_peaks"]
-        if n_peaks == 0:
-            modality = "flat/noisy"
-        elif n_peaks == 1:
-            modality = "unimodal"
-        elif n_peaks == 2:
-            modality = "bimodal"
-        else:
-            modality = f"multimodal ({n_peaks} peaks)"
-
-        full_skew   = tail_dict[ch]["full_skew"]
-        high_frac   = tail_dict[ch]["high_tail_fraction"]
-        low_frac    = tail_dict[ch]["low_tail_fraction"]
-        skew_trim_h = tail_dict[ch]["trimmed_skew_high"]
-        skew_trim_l = tail_dict[ch]["trimmed_skew_low"]
-
-        if np.isnan(full_skew):
-            tail_label = "no significant tails"
-            tail_frac = None
-            if tail_frac is not None:
-                tail_label += f" (fraction: {tail_frac:.3f})"
-            logger.info(f"Ch {ch:02d}: {modality} ({tail_label})")
-            continue
-
-        if not np.isnan(skew_trim_h):
-            dskew_h = full_skew - skew_trim_h
-        else:
-            dskew_h = 0.0
-        if not np.isnan(skew_trim_l):
-            dskew_l = full_skew - skew_trim_l
-        else:
-            dskew_l = 0.0
-
-        strong_skew = 0.3      
-        extreme_skew = 0.5     
-        delta_skew_min = 0.25  
-
-        if 0 < high_frac < 0.01 and full_skew > extreme_skew and dskew_h > delta_skew_min:
-            tail_label = "rare high extremes"
-            tail_frac = high_frac
-
-        elif 0 < low_frac < 0.01 and full_skew < -extreme_skew and dskew_l < -delta_skew_min:
-            tail_label = "rare low extremes"
-            tail_frac = low_frac
-
-        elif full_skew > strong_skew:
-            if high_frac < 0.05:
-                tail_label = "moderate high skew"
-            else:
-                tail_label = "bulk high skew"
-            tail_frac = high_frac
-
-        elif full_skew < -strong_skew:
-            if low_frac < 0.05:
-                tail_label = "moderate low skew"
-            else:
-                tail_label = "bulk low skew"
-            tail_frac = low_frac
-
-        else:
-            tail_label = "no significant tails"
-            tail_frac = None
-
-        # output summary
-        if tail_frac is not None:
-            tail_label += f" (fraction: {tail_frac:.3f})"
-        logger.info(f"Ch {ch:02d}: {modality} ({tail_label})")
-
-
 def plot_vrms_values_against_time(times, vrms_arr_all, channel_list, station_id, run_label, save_location, n_rows = 12, n_cols = 2, day_interval=5):
     '''Plot Vrms distributions for different trigger types.'''
 
@@ -988,7 +718,7 @@ def channel_health(row):
 
 def create_result_csv_file(station_id, run_label, n_events_force, surface_channels, downward_channels, upward_channels, all_channels, validation_results, glitch_info, modality_dict_force, modality_dict_lt, 
                            modality_dict_radiant0, modality_dict_radiant1, outlier_details, save_location):
-    out_csv_file = os.path.join(save_location, f"validation_summary_station{station_id}_{run_label}.csv")
+    out_csv_file = os.path.join(CSV_DIR, f"validation_summary_station{station_id}_{run_label}.csv")
     ch_list = list(all_channels)
 
     spectral_col = []
@@ -1150,9 +880,8 @@ def create_result_csv_file(station_id, run_label, n_events_force, surface_channe
     df.to_csv(out_csv_file, index=False)
     logger.info(f"Validation summary saved to {out_csv_file}")
 
-def write_spectral_results(ch, excess_info_results, station_id, run_label):
-    os.makedirs("detailed_results", exist_ok=True)
-    spectral_results_file = os.path.join("detailed_results", f"spectral_analysis_results_{station_id}_{run_label}.txt")
+def write_spectral_results(ch, excess_info_results, station_id, run_label, log_once = False):
+    spectral_results_file = os.path.join(RESULTS_DIR, f"spectral_analysis_results_{station_id}_{run_label}.txt")
     with open(spectral_results_file, "a") as f:
         f.write(f"Channel {ch:02d}:\n")
         for band, results in excess_info_results.items():
@@ -1160,14 +889,44 @@ def write_spectral_results(ch, excess_info_results, station_id, run_label):
             for key, value in results.items():
                 f.write(f"{key}: {value}\n")
         f.write("\n")
-    logger.info(f"Spectral analysis results for channel {ch:02d} written to {spectral_results_file}")
+    if log_once:
+        logger.info(f"Spectral analysis results written to {spectral_results_file}")
+
+    
+def write_snr_outlier_details(outlier_details, station_id, run_label):
+    outlier_results_file = os.path.join(RESULTS_DIR, f"snr_details_{station_id}_{run_label}.txt")
+    with open(outlier_results_file, "a") as f:
+        for ch in sorted(outlier_details.keys()):
+            entries = outlier_details[ch]
+            n_outliers = len(entries)
+
+            if n_outliers == 0:
+                f.write(f"\nChannel {ch:02d}:\n 0 outliers\n")
+                continue
+
+            k_ch = entries[0]["k"]
+            f.write(f"\nChannel {ch:02d}:\n {n_outliers} outliers (k = {k_ch:.2f})\n")
+            
+            for e in entries:
+                f.write(f"  - run {e['run']}, event {e['eventNumber']}, |z| = {e['z_abs']:.2f} (delta = {e['z_minus_k']:.2f} above k)\n")
+            
+    logger.info(f"SNR outlier details written to {outlier_results_file}")
+
+def write_vrms_modality_results(modality, tail_label, trigger_label, station_id, run_label):
+    modality_results_file = os.path.join(RESULTS_DIR, f"vrms_modality_{station_id}_{run_label}_{trigger_label}.txt")
+    with open(modality_results_file, "a") as f:
+        for ch in sorted(modality.keys()):
+            modality_result = modality[ch]
+            tail_label_result = tail_label[ch]
+            f.write(f"Channel {ch} ({trigger_label} events): {modality_result} ({tail_label_result})\n")
+    logger.info(f"Vrms modality results for {trigger_label} events written to {modality_results_file}")
 
 if __name__ == "__main__":
 
     argparser = ArgumentParser(description="RNO-G Science Verification Analysis")
     argparser.add_argument("-st", "--station_id", type=int, required=True, help="Station to analyze, e.g --station_id 14")
     argparser.add_argument("-b", "--backend", type=str, default="pyroot", help="Backend to use for reading data, should be either pyroot or uproot (default: pyroot), e.g. --backend pyroot or --backend uproot")
-    argparser.add_argument("-sl", "--save_location", type=str, default=".", help="Location to save the output plots (default: current directory), e.g. --save_location /path/to/save/plots")
+    argparser.add_argument("-sl", "--save_location", type=str, default=PLOTS_DIR, help="Location to save the output plots (default: plots directory under script directory), e.g. --save_location /path/to/save/plots")
     argparser.add_argument("-ex", "--exclude-runs", nargs="+", type=int, default=[], metavar="RUN", help="Run number(s) to exclude, e.g. --exclude-runs 1005 1010")
     argparser.add_argument("--debug_plot", action="store_true", help="If set, will create debug plots.")
 
@@ -1248,7 +1007,7 @@ if __name__ == "__main__":
     # Select FORCE trigger events
     force_mask = choose_trigger_type(event_info, "FORCE")
 
-    # Spectral analysis for FORCE trigger events only
+    ###### Spectral analysis for FORCE trigger events only
     spec_arr_force = spec_arr[:, force_mask, :]
     norm_spec_arr_force = norm_spec_arr[:, force_mask, :]
     logger.info(f"Number of FORCE trigger events: {spec_arr_force.shape[1]}")
@@ -1293,7 +1052,8 @@ if __name__ == "__main__":
         all_validation_results[ch] = validation_results
 
         # Write detailed spectral results to text file for each channel
-        write_spectral_results(ch, excess_info_results, station_id, run_label)
+        write_spectral_results(ch, excess_info_results, station_id, run_label, log_once=(ch==surface_channels[-1]))
+    
 
     # Select other trigger types and plot them
     lt_mask = choose_trigger_type(event_info, "LT")
@@ -1320,7 +1080,8 @@ if __name__ == "__main__":
     plot_time_integrated_deep_spectra(station_id, spec_arr_radiant0, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label="radiant0")
     plot_time_integrated_deep_spectra(station_id, spec_arr_radiant1, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label="radiant1")
     
-    # SNR analysis
+    ###### SNR analysis
+    logger.info("Starting SNR analysis for FORCE trigger events...")
     snr_arr_force = snr_arr[:, force_mask]
     event_info_force = {key: np.array(value)[force_mask] for key, value in event_info.items()}
     times = np.array(times)
@@ -1329,57 +1090,61 @@ if __name__ == "__main__":
     log_snr_arr, log_mean_list, log_median_list, log_std_list, log_difference_list = calculate_statistics_log_snr(snr_arr_force)
     ref_log_mean_filename = f"expected_values/station_{station_id}_ref_log_mean_snr.json"
     ref_log_std_filename = f"expected_values/station_{station_id}_ref_log_std_snr.json"
-    ref_log_mean_list = load_values_json(ref_log_mean_filename)
-    ref_log_std_list = load_values_json(ref_log_std_filename)
+    ref_log_mean_list = load_values_json(SCRIPT_DIR, ref_log_mean_filename)
+    ref_log_std_list = load_values_json(SCRIPT_DIR, ref_log_std_filename)
     z_score_arr_log_snr = calculate_z_score_snr(log_snr_arr, ref_log_mean_list, ref_log_std_list, all_channels)
     k_values_filename_snr = f"expected_values/station_{station_id}_k_ref_values_snr.json"
-    k_values_log_snr = load_values_json(k_values_filename_snr)
+    k_values_log_snr = load_values_json(SCRIPT_DIR, k_values_filename_snr)
     flag_outliers_snr = outlier_flag(z_score_arr_log_snr, k_values_log_snr, all_channels)
 
     outlier_details_snr = find_outlier_details(z_score_arr_log_snr, k_values_log_snr, flag_outliers_snr, event_info_force, all_channels)
-    print_outlier_summary(outlier_details_snr)
+    write_snr_outlier_details(outlier_details_snr, station_id, run_label)
 
     day_interval = choose_day_interval(times)
     plot_snr_against_time(station_id, times_force, snr_arr_force, flag_outliers_snr, z_score_arr_log_snr, k_values_log_snr, all_channels, save_location, run_label, nrows=12, ncols=2, day_interval=day_interval)
 
-    # Vrms analysis
+    ##### Vrms analysis
     vrms_arr, vrms_arr_force, vrms_arr_radiant0, vrms_arr_radiant1, vrms_arr_lt = calculate_vrms(trace_arr, event_info)
     logger.info(f"Number of RADIANT0 trigger events: {len(vrms_arr_radiant0[1])}, Number of RADIANT1 trigger events: {len(vrms_arr_radiant1[1])}, Number of LT trigger events: {len(vrms_arr_lt[1])}")
-
-    modality_dict_force = kde_modality(vrms_arr_force, all_channels, bandwidth=None, grid_points=512, peak_prominence=0.01)
-    tail_dict_force = tail_fraction_and_trimmed_skew_two_sided(vrms_arr_force, all_channels, lower_percentile=25, upper_percentile=75, extreme_k=3)
-    logger.info("\nVrms characteristics for FORCE trigger events:")
+    
+    logger.info(f"Calculating Vrms modality and tail characteristics for each trigger type...")
+    modality_dict_force = kde_modality(vrms_arr_force, all_channels, kde_modality_config=kde_modality_function_parameters)
+    tail_dict_force = tail_fraction_and_trimmed_skew_two_sided(vrms_arr_force, all_channels, skewness_config=skewness_function_parameters)
     if len(vrms_arr_force[1]) < 100:
             logger.warning(f"FORCE trigger has less than 100 valid Vrms entries ({len(vrms_arr_force)}). Results for the Vrms statistics may be unreliable.")
-    report_vrms_characteristics(modality_dict_force, tail_dict_force, all_channels)
+    modality_force, tail_label_force = report_vrms_characteristics(modality_dict_force, tail_dict_force, all_channels, report_config=report_vrms_function_parameters)
 
-    modality_dict_radiant0 = kde_modality(vrms_arr_radiant0, all_channels, bandwidth=None, grid_points=512, peak_prominence=0.01)
-    tail_dict_radiant0 = tail_fraction_and_trimmed_skew_two_sided(vrms_arr_radiant0, all_channels, lower_percentile=25, upper_percentile=75, extreme_k=3)
-    logger.info("\nVrms characteristics for RADIANT0 trigger events:")
+    modality_dict_radiant0 = kde_modality(vrms_arr_radiant0, all_channels, kde_modality_config=kde_modality_function_parameters)
+    tail_dict_radiant0 = tail_fraction_and_trimmed_skew_two_sided(vrms_arr_radiant0, all_channels, skewness_config=skewness_function_parameters)
     if len(vrms_arr_radiant0[1]) < 100:
             logger.warning(f"RADIANT0 trigger has less than 100 valid Vrms entries ({len(vrms_arr_radiant0)}). Results for the Vrms statistics may be unreliable.")
-    report_vrms_characteristics(modality_dict_radiant0, tail_dict_radiant0, all_channels)
+    modality_radiant0, tail_label_radiant0 = report_vrms_characteristics(modality_dict_radiant0, tail_dict_radiant0, all_channels, report_config=report_vrms_function_parameters)
 
-    modality_dict_radiant1 = kde_modality(vrms_arr_radiant1, all_channels, bandwidth=None, grid_points=512, peak_prominence=0.01)
-    tail_dict_radiant1 = tail_fraction_and_trimmed_skew_two_sided(vrms_arr_radiant1, all_channels, lower_percentile=25, upper_percentile=75, extreme_k=3)
-    logger.info("\nVrms characteristics for RADIANT1 trigger events:")
+    modality_dict_radiant1 = kde_modality(vrms_arr_radiant1, all_channels, kde_modality_config=kde_modality_function_parameters)
+    tail_dict_radiant1 = tail_fraction_and_trimmed_skew_two_sided(vrms_arr_radiant1, all_channels, skewness_config=skewness_function_parameters)
     if len(vrms_arr_radiant1[1]) < 100:
             logger.warning(f"RADIANT1 trigger has less than 100 valid Vrms entries ({len(vrms_arr_radiant1)}). Results for the Vrms statistics may be unreliable.")
-    report_vrms_characteristics(modality_dict_radiant1, tail_dict_radiant1, all_channels)
+    modality_radiant1, tail_label_radiant1 = report_vrms_characteristics(modality_dict_radiant1, tail_dict_radiant1, all_channels, report_config=report_vrms_function_parameters)
 
-    modality_dict_lt = kde_modality(vrms_arr_lt, all_channels, bandwidth=None, grid_points=512, peak_prominence=0.01)
-    tail_dict_lt = tail_fraction_and_trimmed_skew_two_sided(vrms_arr_lt, all_channels, lower_percentile=25, upper_percentile=75, extreme_k=3)
-    logger.info("\nVrms characteristics for LT trigger events:")  
+    modality_dict_lt = kde_modality(vrms_arr_lt, all_channels, kde_modality_config=kde_modality_function_parameters)
+    tail_dict_lt = tail_fraction_and_trimmed_skew_two_sided(vrms_arr_lt, all_channels, skewness_config=skewness_function_parameters)
     if len(vrms_arr_lt[1]) < 100:
             logger.warning(f"LT trigger has less than 100 valid Vrms entries ({len(vrms_arr_lt)}). Results for the Vrms statistics may be unreliable.")
-    report_vrms_characteristics(modality_dict_lt, tail_dict_lt, all_channels)
+    modality_lt, tail_label_lt = report_vrms_characteristics(modality_dict_lt, tail_dict_lt, all_channels, report_config=report_vrms_function_parameters)
     plot_vrms_values_against_time(times, vrms_arr, all_channels, station_id, run_label, save_location, n_rows=12, n_cols=2, day_interval=day_interval)
 
+    # Write detailed Vrms modality results to text files for each trigger type
+    write_vrms_modality_results(modality_force, tail_label_force, trigger_label="FORCE", station_id=station_id, run_label=run_label)
+    write_vrms_modality_results(modality_radiant0, tail_label_radiant0, trigger_label="RADIANT0", station_id=station_id, run_label=run_label)
+    write_vrms_modality_results(modality_radiant1, tail_label_radiant1, trigger_label="RADIANT1", station_id=station_id, run_label=run_label)
+    write_vrms_modality_results(modality_lt, tail_label_lt, trigger_label="LT", station_id=station_id, run_label=run_label)
+
+
     # The Vrms statistics can be misleading (especially for low event number) so the debugging plots are always generated
-    debug_plot_vrms_distribution(vrms_arr_force, modality_dict_force, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="force", save_location=save_location, n_rows=12, n_cols=2)
-    debug_plot_vrms_distribution(vrms_arr_radiant0, modality_dict_radiant0, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="radiant0", save_location=save_location, n_rows=12, n_cols=2)
-    debug_plot_vrms_distribution(vrms_arr_radiant1, modality_dict_radiant1, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="radiant1", save_location=save_location, n_rows=12, n_cols=2)
-    debug_plot_vrms_distribution(vrms_arr_lt, modality_dict_lt, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="lt", save_location=save_location, n_rows=12, n_cols=2)
+    debug_plot_vrms_distribution(vrms_arr_force, modality_dict_force, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="FORCE", save_location=save_location, n_rows=12, n_cols=2)
+    debug_plot_vrms_distribution(vrms_arr_radiant0, modality_dict_radiant0, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="RADIANT0", save_location=save_location, n_rows=12, n_cols=2)
+    debug_plot_vrms_distribution(vrms_arr_radiant1, modality_dict_radiant1, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="RADIANT1", save_location=save_location, n_rows=12, n_cols=2)
+    debug_plot_vrms_distribution(vrms_arr_lt, modality_dict_lt, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="LT", save_location=save_location, n_rows=12, n_cols=2)
     
     # Glitching analysis
     glitch_info = binomtest_glitch_fraction(glitch_arr, all_channels, alpha=0.01)
