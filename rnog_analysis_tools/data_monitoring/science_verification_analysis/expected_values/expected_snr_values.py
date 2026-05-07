@@ -1,95 +1,24 @@
-from NuRadioReco.modules.io.RNO_G.readRNOGDataMattak import readRNOGData
-import rnog_data.runtable as rt
-from NuRadioReco.detector import detector
 import logging
 import os
-import datetime
 import numpy as np
-from matplotlib import pyplot as plt
-from NuRadioReco.utilities import units
-from tqdm import tqdm
 from argparse import ArgumentParser
-import warnings
-import pandas as pd
-import NuRadioReco.framework.event
-import NuRadioReco.framework.station
-import NuRadioReco.framework.channel
-import NuRadioReco.framework.trigger
-from NuRadioReco.framework.parameters import channelParameters as chp
-from NuRadioReco.modules.RNO_G.dataProviderRNOG import dataProviderRNOG
-from cycler import cycler
-import matplotlib as mpl
-#from cmap import Colormap
-from collections import defaultdict
-from matplotlib.lines import Line2D
-from matplotlib.patches import Patch
-from science_verification_analysis import convert_events_information, choose_trigger_type, station_channels, read_rnog_runtable, read_rnog_data, calculate_statistics_log_snr, calculate_z_score_snr, outlier_flag, find_outlier_details, print_outlier_summary, choose_day_interval, plot_snr_against_time
+import logging
 import json
-import matplotlib.dates as mdates
-from datetime import timezone
+import sys
 
+logger = logging.getLogger(__name__)
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PARENT_DIR = os.path.dirname(SCRIPT_DIR)
+sys.path.insert(0, PARENT_DIR)
+
+from config_station import get_station_config
+from read_rnog_data_nuradio import convert_events_information, read_rnog_data
+from snr_analysis_sva import calculate_statistics_log_snr, calculate_z_score_snr, outlier_flag, find_outlier_details
+from science_verification_analysis import choose_trigger_type, read_rnog_runtable, choose_day_interval, plot_snr_against_time, write_snr_outlier_details
+from config_plotting import set_plot_style
 
 '''This module can be used to find expected parameter values for RNO-G stations from a known stable time period.'''
-
-# Channel mapping for the first seven RNO-G stations:
-SURFACE_CHANNELS_LIST = [12, 13, 14, 15, 16, 17, 18 , 19 , 20]
-DEEP_CHANNELS_LIST = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 21, 22, 23]
-UPWARD_CHANNELS_LIST = [13, 16, 19]
-DOWNWARD_CHANNELS_LIST = [12, 14, 15, 17, 18, 20]
-VPOL_LIST = [0, 1, 2, 3, 5, 6, 7, 9, 10, 22, 23]
-HPOL_LIST = [4, 8, 11, 21]
-PHASED_ARRAY_LIST = [0, 1, 2, 3]
-ALL_CHANNELS_LIST = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 , 19 , 20, 21, 22, 23]
-
-# Channel mapping for Station 14:
-STATION_14_SURFACE_CHANNELS_LIST = [12, 13, 14, 15, 16, 17, 18 , 19]
-STATION_14_DEEP_CHANNELS_LIST = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 20, 21, 22, 23]
-STATION_14_UPWARD_CHANNELS_LIST = [13, 15, 16, 18]
-STATION_14_DOWNWARD_CHANNELS_LIST = [12, 14, 17, 19]
-STATION_14_VPOL_LIST = [0, 1, 2, 3, 5, 6, 7, 9, 10, 20, 22, 23]
-STATION_14_HPOL_LIST = [4, 8, 11, 21]
-STATION_14_PHASED_ARRAY_LIST = [0, 1, 2, 3]
-STATION_14_ALL_CHANNELS_LIST = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 , 19 , 20, 21, 22, 23]
-
-# Script directory
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# Matplotlib settings
-
-mpl.rcParams.update({
-    'font.family': 'sans-serif',
-    'font.sans-serif': ['Helvetica', 'Arial', 'DejaVu Sans'],
-    'font.size': 17,
-
-    'axes.labelsize': 17,
-    'axes.titlesize': 18,
-    'axes.linewidth': 1.2,
-    'axes.grid': False,
-
-    'xtick.labelsize': 17,
-    'ytick.labelsize': 17,
-    'xtick.major.size': 6,
-    'ytick.major.size': 6,
-    'xtick.major.width': 1.2,
-    'ytick.major.width': 1.2,
-    'xtick.minor.size': 3,
-    'ytick.minor.size': 3,
-    'xtick.minor.visible': True,
-    'ytick.minor.visible': True,
-
-    'lines.linewidth': 1.6,
-    'lines.antialiased': True,
-    'lines.markersize': 6,
-
-    'legend.fontsize': 14,
-    'legend.frameon': False,
-    'legend.handlelength': 1,
-    'legend.borderpad': 0.3,
-
-    'figure.dpi': 120,
-    'savefig.dpi': 300,
-    'savefig.bbox': 'tight',
-})
 
 def find_k_value(z_score_log, channel_list, quantile=0.999):
     '''Find the k-value corresponding to the given reference z-score array and quantile.'''
@@ -129,10 +58,7 @@ if __name__ == "__main__":
                             help="Range of run numbers to analyze (inclusive). Provide start and end run numbers separated by a space, e.g. --run_range 1000 1050")
     run_selection.add_argument("--time_range", nargs=2, type=str, metavar=("START_DATE", "END_DATE"),
                             help="Date range to analyze (inclusive). Provide start and end dates separated by a space in YYYY-MM-DD format, e.g. --time_range 2024-07-15 2024-09-30")
-
-
-    surface_channels, deep_channels, upward_channels, downward_channels, vpol_channels, hpol_channels, phased_array_channels, all_channels = station_channels(argparser.parse_args().station_id)
-
+    
     args = argparser.parse_args()
 
     station_id = args.station_id
@@ -165,6 +91,18 @@ if __name__ == "__main__":
     else:
         run_label = f"runs_{first_run}_{last_run}"
 
+    # Get channel lists from config
+    config = get_station_config(station_id)
+    surface_channels = config["surface_channels"]
+    deep_channels = config["deep_channels"]
+    upward_channels = config["upward_channels"]
+    downward_channels = config["downward_channels"]
+    vpol_channels = config["vpol_channels"]
+    hpol_channels = config["hpol_channels"]
+    phased_array_channels = config["phased_array_channels"]
+    all_channels = config["all_channels"]
+    reference_channels_galaxy = config["reference_channels_galaxy"]
+    reference_channels = config["reference_channels"]
 
     # Create save location directory if it doesn't exist
     save_location = os.path.expanduser(args.save_location)
@@ -194,7 +132,7 @@ if __name__ == "__main__":
     flag_outliers_snr = outlier_flag(z_score_arr_log_snr, k_values_log_snr, all_channels)
 
     outlier_details_snr = find_outlier_details(z_score_arr_log_snr, k_values_log_snr, flag_outliers_snr, event_info_force, all_channels)
-    print_outlier_summary(outlier_details_snr)
+    write_snr_outlier_details(outlier_details_snr, station_id, run_label)
 
     day_interval = choose_day_interval(times)
     plot_snr_against_time(station_id, times_force, snr_arr_force, flag_outliers_snr, z_score_arr_log_snr, k_values_log_snr, all_channels, save_location, run_label, nrows=12, ncols=2, day_interval=day_interval)
