@@ -13,23 +13,21 @@ from argparse import ArgumentParser
 import pandas as pd
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
-from scipy.stats import skew
-import json
 import matplotlib.dates as mdates
 from datetime import timezone
-from scipy.stats import gaussian_kde, skew, binomtest
-from scipy.signal import find_peaks
 from matplotlib import colors, cm
 from NuRadioReco.modules.RNO_G.channelBlockOffsetFitter import fit_block_offsets
-from config_station import get_station_config
-from config_plotting import set_plot_style
+from config_files_sva.config_station import get_station_config
+from config_files_sva.config_plotting import set_plot_style
 from read_rnog_data_nuradio import convert_events_information, read_rnog_data
-from spectral_analysis_sva import find_amplitude_ratio_in_band, find_amplitude_ratio_in_band_specific_bkg, excess_info_from_ratio, excess_info_from_ratio_specific_bkg, validate_excess_in_bands
-from config_spectral_analysis import SPECTRAL_BANDS, ALPHA_SPEC, CI_THRESHOLDS_SPEC, NORMALIZATION_BAND
+from analysis_functions_sva.spectral_analysis_sva import find_amplitude_ratio_in_band, find_amplitude_ratio_in_band_specific_bkg, excess_info_from_ratio, excess_info_from_ratio_specific_bkg, validate_excess_in_bands
+from config_files_sva.config_spectral_analysis import SPECTRAL_BANDS, ALPHA_SPEC, CI_THRESHOLDS_SPEC, NORMALIZATION_BAND
 import copy
-from snr_analysis_sva import calculate_statistics_log_snr, calculate_z_score_snr, symmetry_metrics_channel_z_score, symmetry_metrics_z_score, load_values_json, outlier_flag, find_outlier_details
-from vrms_analysis_sva import calculate_vrms, kde_modality, tail_fraction_and_trimmed_skew_two_sided, report_vrms_characteristics
-from config_vrms import kde_modality_function_parameters, skewness_function_parameters, report_vrms_function_parameters
+from analysis_functions_sva.snr_analysis_sva import calculate_statistics_log_snr, calculate_z_score_snr, symmetry_metrics_channel_z_score, symmetry_metrics_z_score, load_values_json, outlier_flag, find_outlier_details
+from analysis_functions_sva.vrms_analysis_sva import calculate_vrms, kde_modality, tail_fraction_and_trimmed_skew_two_sided, report_vrms_characteristics
+from config_files_sva.config_vrms import kde_modality_function_parameters, skewness_function_parameters, report_vrms_function_parameters
+from analysis_functions_sva.glitching_analysis_sva import binomtest_glitch_fraction
+from config_files_sva.config_glitching import config_glitching_values
 
 #### Script directory for json files
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -39,6 +37,7 @@ PLOTS_DIR = os.path.join(SCRIPT_DIR, "plots")
 RESULTS_DIR = os.path.join(SCRIPT_DIR, "detailed_results")
 CSV_DIR = os.path.join(SCRIPT_DIR, "channel_health_summary")
 LOGS_DIR = os.path.join(SCRIPT_DIR, "logs")
+
 # Create output directories if they don't exist
 os.makedirs(RESULTS_DIR, exist_ok=True)
 os.makedirs(PLOTS_DIR, exist_ok=True)
@@ -455,41 +454,6 @@ def plot_trigger_rate_with_thresholds(station_id, event_info, down_channels, up_
     return fig, ax_rate, ax_thr
 
 #### Glitching analysis functions ####
-def binomtest_glitch_fraction(glitch_arr, channel_list, alpha=0.01):
-    '''Perform binomial test on glitch fractions for each channel (with p0=0.1).'''
-    glitch_info = {}
-    n_events = glitch_arr.shape[1]
-
-    for ch in channel_list:
-        glitch_ch = glitch_arr[ch]
-        n_glitches = np.sum(glitch_ch > 0)
-
-        result = binomtest(n_glitches, n_events, p=0.1, alternative="greater")
-        pval = result.pvalue
-        statistic = result.statistic
-        confidence_interval = result.proportion_ci(confidence_level=0.99)
-
-        if pval > alpha:
-            validation = "NO EXCESSIVE GLITCHING"
-        else:
-            if confidence_interval.low > 0.3:
-                validation = "STRONG EXCESSIVE GLITCHING"
-            elif confidence_interval.low > 0.2:
-                validation = "MODERATE EXCESSIVE GLITCHING"
-            else:
-                validation = "WEAK EXCESSIVE GLITCHING"
-
-        glitch_info[ch] = {
-            "n_glitches": int(n_glitches),
-            "n_events": int(n_events),
-            "pval": float(pval),
-            "confidence_interval": (float(confidence_interval.low), float(confidence_interval.high)),
-            "glitch_fraction": float(n_glitches / n_events),
-            "validation": validation,
-        }
-
-    return glitch_info
-
 def glitching_violin_plot(glitch_arr, channel_list, station_id, run_label, save_location):
     data = [glitch_arr[ch] for ch in channel_list]
     means = np.array([np.mean(glitch_arr[ch]) for ch in channel_list])
@@ -880,8 +844,11 @@ def create_result_csv_file(station_id, run_label, n_events_force, surface_channe
     df.to_csv(out_csv_file, index=False)
     logger.info(f"Validation summary saved to {out_csv_file}")
 
-def write_spectral_results(ch, excess_info_results, station_id, run_label, log_once = False):
+def write_spectral_results(ch, excess_info_results, station_id, run_label, log_once = False, reset_file = False):
     spectral_results_file = os.path.join(RESULTS_DIR, f"spectral_analysis_results_{station_id}_{run_label}.txt")
+    if reset_file:
+        open(spectral_results_file, "w").close()  # Clear the file if reset is requested
+    
     with open(spectral_results_file, "a") as f:
         f.write(f"Channel {ch:02d}:\n")
         for band, results in excess_info_results.items():
@@ -895,7 +862,7 @@ def write_spectral_results(ch, excess_info_results, station_id, run_label, log_o
     
 def write_snr_outlier_details(outlier_details, station_id, run_label):
     outlier_results_file = os.path.join(RESULTS_DIR, f"snr_details_{station_id}_{run_label}.txt")
-    with open(outlier_results_file, "a") as f:
+    with open(outlier_results_file, "w") as f:
         for ch in sorted(outlier_details.keys()):
             entries = outlier_details[ch]
             n_outliers = len(entries)
@@ -914,12 +881,29 @@ def write_snr_outlier_details(outlier_details, station_id, run_label):
 
 def write_vrms_modality_results(modality, tail_label, trigger_label, station_id, run_label):
     modality_results_file = os.path.join(RESULTS_DIR, f"vrms_modality_{station_id}_{run_label}_{trigger_label}.txt")
-    with open(modality_results_file, "a") as f:
+    with open(modality_results_file, "w") as f:
         for ch in sorted(modality.keys()):
             modality_result = modality[ch]
             tail_label_result = tail_label[ch]
             f.write(f"Channel {ch} ({trigger_label} events): {modality_result} ({tail_label_result})\n")
     logger.info(f"Vrms modality results for {trigger_label} events written to {modality_results_file}")
+
+def write_glitching_results(glitch_info, station_id, run_label):
+    glitch_results_file = os.path.join(RESULTS_DIR, f"glitching_analysis_results_{station_id}_{run_label}.txt")
+    lines = [
+        (
+            f"Channel {ch:2d} | "
+            f"n_glitches: {glitch_info[ch]['n_glitches']:4d} | "
+            f"n_events: {glitch_info[ch]['n_events']:<4d} | "
+            f"(frac={glitch_info[ch]['glitch_fraction']:.3f}) | "
+            f"p={glitch_info[ch]['pval']:.2e} | "
+            f"CI99%={glitch_info[ch]['confidence_interval']} | "
+            f"{glitch_info[ch]['validation']}"
+        )
+        for ch in all_channels]
+    with open(glitch_results_file, "w") as f:
+        f.write("\n".join(lines))
+    logger.info(f"Glitching analysis results written to {glitch_results_file}")
 
 if __name__ == "__main__":
 
@@ -1052,7 +1036,7 @@ if __name__ == "__main__":
         all_validation_results[ch] = validation_results
 
         # Write detailed spectral results to text file for each channel
-        write_spectral_results(ch, excess_info_results, station_id, run_label, log_once=(ch==surface_channels[-1]))
+        write_spectral_results(ch, excess_info_results, station_id, run_label, log_once=(ch==surface_channels[-1]), reset_file=(ch==surface_channels[0]))
     
 
     # Select other trigger types and plot them
@@ -1146,24 +1130,12 @@ if __name__ == "__main__":
     debug_plot_vrms_distribution(vrms_arr_radiant1, modality_dict_radiant1, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="RADIANT1", save_location=save_location, n_rows=12, n_cols=2)
     debug_plot_vrms_distribution(vrms_arr_lt, modality_dict_lt, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="LT", save_location=save_location, n_rows=12, n_cols=2)
     
-    # Glitching analysis
-    glitch_info = binomtest_glitch_fraction(glitch_arr, all_channels, alpha=0.01)
-    lines = [
-        (
-            f"Channel {ch:2d} | "
-            f"n_glitches: {glitch_info[ch]['n_glitches']:4d} | "
-            f"n_events: {glitch_info[ch]['n_events']:<4d} | "
-            f"(frac={glitch_info[ch]['glitch_fraction']:.3f}) | "
-            f"p={glitch_info[ch]['pval']:.2e} | "
-            f"CI99%={glitch_info[ch]['confidence_interval']} | "
-            f"{glitch_info[ch]['validation']}"
-        )
-        for ch in all_channels]
+    ##### Glitching analysis
+    logger.info("Starting glitching analysis...")
+    config_glitching = copy.deepcopy(config_glitching_values)
+    glitch_info = binomtest_glitch_fraction(glitch_arr, all_channels, config_glitching=config_glitching)
+    write_glitching_results(glitch_info, station_id, run_label)
     
-    logger.info(
-        "\nGlitching analysis results:\n" +
-        "\n".join(lines)
-    )
     glitching_violin_plot(glitch_arr, all_channels, station_id, run_label, save_location)
     plot_glitch_q99_over_time(np.array(times), glitch_arr, all_channels, station_id, run_label, save_location)
 
