@@ -8,6 +8,7 @@ import NuRadioReco.framework.trigger
 from NuRadioReco.framework.parameters import channelParameters as chp
 from NuRadioReco.modules.RNO_G.dataProviderRNOG import dataProviderRNOG
 from NuRadioReco.framework.parameters import channelParametersRNOG as chp_rnog
+from NuRadioReco.utilities import units
 from collections import defaultdict
 import logging
 
@@ -27,7 +28,7 @@ def convert_events_information(event_info, convert_to_arrays=True):
 
     return data
 
-def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
+def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot", sampling_rate = 2.4*units.GHz):
     '''Read RNO-G data for a given station and list of run numbers using the specified backend.'''
     file_list = []
     valid_run_numbers = []
@@ -58,6 +59,7 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
     times_trace_batches = []
     snr_batches = []
     glitch_batches = []
+    block_offset_batches = []
     run_no_all = []
     times_all = []
     freqs = None
@@ -70,11 +72,14 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
     cgd_rnog = cgd_rnog()
     cgd_rnog.begin()
 
+    from NuRadioReco.modules.RNO_G.channelBlockOffsetFitter import channelBlockOffsets as cbo
+    cbo = cbo()
+
     for batch in tqdm(np.array_split(np.array(file_list), n_batches), desc="Reading batches", unit="batch"):
         tableReader = dataProviderRNOG()
         tableReader.begin(files=batch.tolist(), 
                           det=None,
-                          reader_kwargs={"overwrite_sampling_rate":2.4, 
+                          reader_kwargs={"overwrite_sampling_rate":sampling_rate, 
                                          "convert_to_voltage":True,
                                          "apply_baseline_correction":"auto",
                                          "mattak_kwargs":{"backend":backend}})
@@ -95,12 +100,13 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
         times_trace_arr = np.zeros((len(channel_list), n_events, 2048))
         snr_arr = np.zeros((len(channel_list), n_events))
         glitch_arr = np.zeros((len(channel_list), n_events))
+        block_offset_arr = np.zeros((len(channel_list), n_events, 16))
 
         run_no = []
         times = []
         event_ids = []
         
-        for idx, event in enumerate(tqdm(tableReader.reader.run(), total=n_events, desc="Events", unit="evt", leave=False)):
+        for idx, event in enumerate(tqdm(tableReader.run(), total=n_events, desc="Events", unit="evt", leave=False)):
             station = event.get_station()
             time = station.get_station_time().datetime64
             times.append(time)
@@ -127,6 +133,9 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
                 trace = channel.get_trace()
                 trace_arr[i_ch, idx, :] = trace
 
+                block_offsets = channel.get_parameter(chp.block_offsets)
+                block_offset_arr[i_ch, idx, :] = block_offsets
+                
                 if freqs is None and idx == 0 and i_ch == 0:
                     freqs = channel.get_frequencies()
         
@@ -135,14 +144,18 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
         times_trace_batches.append(times_trace_arr)
         snr_batches.append(snr_arr)
         glitch_batches.append(glitch_arr)
+        block_offset_batches.append(block_offset_arr)
         run_no_all.extend(run_no)
         times_all.extend(times)
+
+    #tableReader.end()
 
     spec_arr = np.concatenate(spec_batches, axis=1)
     trace_arr = np.concatenate(trace_batches, axis=1)
     times_trace_arr = np.concatenate(times_trace_batches, axis=1)
     snr_arr = np.concatenate(snr_batches, axis=1)
     glitch_arr = np.concatenate(glitch_batches, axis=1)
+    block_offset_arr = np.concatenate(block_offset_batches, axis=1)
 
     run_no = np.array(run_no_all)
     times = np.array(times_all)     
@@ -156,7 +169,7 @@ def read_rnog_data(station_id: int, run_numbers: list, backend: str = "pyroot"):
         logger.warning(f"Found {np.sum(inf_mask)} events with inf trigger time (of {len(inf_mask)} events)")
 
     logger.info(f"n_events read: {spec_arr.shape[1]}, n_events_total: {n_events_total}")
-    logger.debug(f"freqs shape: {freqs.shape}, spec_arr shape: {spec_arr.shape}, trace_arr shape: {trace_arr.shape}, times_trace_arr shape: {times_trace_arr.shape}, snr_arr shape: {snr_arr.shape}, times shape: {times.shape}, run_no shape: {run_no.shape}  ")
+    logger.debug(f"freqs shape: {freqs.shape}, spec_arr shape: {spec_arr.shape}, trace_arr shape: {trace_arr.shape}, times_trace_arr shape: {times_trace_arr.shape}, snr_arr shape: {snr_arr.shape}, times shape: {times.shape}, run_no shape: {run_no.shape}, block_offset_arr shape: {block_offset_arr.shape}")
     logger.debug(f"trigger types: {np.unique(event_info['triggerType'])}")
 
-    return spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info, glitch_arr
+    return spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info, glitch_arr, block_offset_arr

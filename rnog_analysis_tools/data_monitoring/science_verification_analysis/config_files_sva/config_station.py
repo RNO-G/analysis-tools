@@ -1,3 +1,6 @@
+from NuRadioReco.utilities import units
+
+
 DEFAULT_CONFIG = {
     "all_channels": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 , 19 , 20, 21, 22, 23],
     "surface_channels": [12, 13, 14, 15, 16, 17, 18 , 19 , 20],
@@ -29,3 +32,6 @@ def get_station_config(station_id):
         adjustments = STATION_SPECIFIC_ADJUSTMENTS[station_id]
         cfg.update(adjustments)
     return cfg
+
+sampling_rate = {"after_2024": 2.4*units.GHz,
+                 "before_2024": 3.2*units.GHz}

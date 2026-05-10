@@ -17,7 +17,7 @@ import matplotlib.dates as mdates
 from datetime import timezone
 from matplotlib import colors, cm
 from NuRadioReco.modules.RNO_G.channelBlockOffsetFitter import fit_block_offsets
-from config_files_sva.config_station import get_station_config
+from config_files_sva.config_station import get_station_config, sampling_rate
 from config_files_sva.config_plotting import set_plot_style
 from read_rnog_data_nuradio import convert_events_information, read_rnog_data
 from analysis_functions_sva.spectral_analysis_sva import find_amplitude_ratio_in_band, find_amplitude_ratio_in_band_specific_bkg, excess_info_from_ratio, excess_info_from_ratio_specific_bkg, validate_excess_in_bands
@@ -28,6 +28,8 @@ from analysis_functions_sva.vrms_analysis_sva import calculate_vrms, kde_modalit
 from config_files_sva.config_vrms import kde_modality_function_parameters, skewness_function_parameters, report_vrms_function_parameters
 from analysis_functions_sva.glitching_analysis_sva import binomtest_glitch_fraction
 from config_files_sva.config_glitching import config_glitching_values
+from analysis_functions_sva.block_offsets_analysis_sva import get_block_offsets_after_removal, get_block_offsets_before_removal, plot_block_offsets_violin_before_after_comparison, block_offset_statistics
+from config_files_sva.config_block_offsets import block_offset_limits
 
 #### Script directory for json files
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -528,44 +530,6 @@ def plot_glitch_q99_over_time(times, glitch_arr, channels, station_id, run_label
     plt.savefig(os.path.join(save_location, f"glitch_q99_{station_id}_{run_label}.pdf"))
     plt.close(fig)
 
-#### Block offsets ####
-def plot_block_offsets_violin(trace_arr, event_info, channel_list, station_id, run_label, save_location):
-    force_mask = event_info["triggerType"] == "FORCE"
-    trace_arr_force = trace_arr[:, force_mask, :]
-    n_force_events = trace_arr_force.shape[1]
-
-    fit_blocks_flat = []
-
-    for ch in channel_list:
-        traces_force_ch = trace_arr_force[ch] 
-        offsets_ch = np.array([fit_block_offsets(trace, sampling_rate=2.4) for trace in traces_force_ch])
-        fit_blocks_flat.append(offsets_ch.ravel())
-
-    fit_blocks_flat = np.array(fit_blocks_flat)
-
-    fig, ax = plt.subplots(figsize=(12, 6))
-    parts = ax.violinplot(fit_blocks_flat.T, positions=channel_list, showextrema=True, showmedians=True, vert=False, side="high", widths=1.8,)
-
-    for pc in parts["bodies"]:
-        pc.set_facecolor("lightblue")
-        pc.set_edgecolor("black")
-        pc.set_alpha(0.7)
-
-    parts["cmedians"].set_color("black")
-    parts["cmedians"].set_linewidth(1.8)
-
-    ax.set_xlabel("Fitted block offset [V]")
-    ax.set_ylabel("Channel")
-    ax.grid(True, alpha=0.3)
-
-    ax.plot(np.nan, np.nan, label=f"{n_force_events} FORCE triggers", color="k")
-    ax.plot(np.nan, np.nan, label="block-offset fit", color="C0")
-    ax.legend(loc="best")
-
-    plt.tight_layout()
-    plt.savefig(os.path.join(save_location, f"block_offset_violin_{station_id}_{run_label}.pdf"))
-    plt.close(fig)
-
 #### Debug plots ####
 def debug_plot_ratios(ratio_arr_dict, channels_order, save_location, station_id, run_label, bins=30):
     n_bands = len(ratio_arr_dict)
@@ -905,6 +869,27 @@ def write_glitching_results(glitch_info, station_id, run_label):
         f.write("\n".join(lines))
     logger.info(f"Glitching analysis results written to {glitch_results_file}")
 
+def write_block_offset_results(block_offset_stats, station_id, run_label):
+    block_offset_results_file = os.path.join(RESULTS_DIR, f"block_offset_analysis_results_{station_id}_{run_label}.txt")
+    with open(block_offset_results_file, "w") as f:
+        for ch in sorted(block_offset_stats.keys()):
+            stats = block_offset_stats[ch]
+            f.write(f"Channel {ch:02d}:\n")
+            f.write(f"  Before removal - mean: {stats['before_mean']} V, median: {stats['before_median']} V, std: {stats['before_std']} V, IQR: {stats['iqr_before']} V\n")
+            f.write(f"  After removal - mean: {stats['after_mean']} V, median: {stats['after_median']} V, std: {stats['after_std']} V, IQR: {stats['iqr_after']} V\n")
+            f.write(f"  Removal fraction (based on median): {stats['removal_fraction']*100:.1f}%\n")
+            f.write(f"  IQR reduction fraction: {stats['iqr_reduction_fraction']*100:.1f}%\n")
+
+            if stats["before_median"] > block_offset_limits["median"]:
+                logger.warning(f"Channel {ch:02d} has a high median block offset of {stats['before_median']} V before removal, which may indicate a potential issue with the channel.")
+            elif stats["iqr_before"] > block_offset_limits["iqr"]:
+                logger.warning(f"Channel {ch:02d} has a high IQR of block offsets ({stats['iqr_before']} V) before removal, indicating significant variability that may need further investigation.")
+            elif stats["after_median"] > block_offset_limits["median"]:
+                logger.warning(f"Channel {ch:02d} has a relatively high median block offset of {stats['after_median']} V after removal, removal was not fully effective.")
+            elif stats["iqr_after"] > block_offset_limits["iqr"]:
+                logger.warning(f"Channel {ch:02d} has a relatively high IQR of block offsets ({stats['iqr_after']} V) after removal, indicating that there may still be significant variability in block offsets.")
+    logger.info(f"Block offset analysis results written to {block_offset_results_file}")
+
 if __name__ == "__main__":
 
     argparser = ArgumentParser(description="RNO-G Science Verification Analysis")
@@ -913,6 +898,7 @@ if __name__ == "__main__":
     argparser.add_argument("-sl", "--save_location", type=str, default=PLOTS_DIR, help="Location to save the output plots (default: plots directory under script directory), e.g. --save_location /path/to/save/plots")
     argparser.add_argument("-ex", "--exclude-runs", nargs="+", type=int, default=[], metavar="RUN", help="Run number(s) to exclude, e.g. --exclude-runs 1005 1010")
     argparser.add_argument("--debug_plot", action="store_true", help="If set, will create debug plots.")
+    argparser.add_argument("--sampling_rate", type=str, default= "after_2024", choices=["before_2024", "after_2024"], help="Sampling rate to use, choices are 'before_2024' (3.2 GHz) and 'after_2024' (2.4 GHz), default is 'after_2024'.")
 
     run_selection = argparser.add_mutually_exclusive_group(required=True)
     run_selection.add_argument("--runs", nargs="+", type=int, metavar="RUN_NUMBERS",
@@ -955,10 +941,12 @@ if __name__ == "__main__":
     else:
         run_label = f"runs_{first_run}_{last_run}"
 
+    sampling_rate_choice = args.sampling_rate
+    sr = sampling_rate[sampling_rate_choice]
+
     # Start logging
     setup_logging(station_id, run_label)
-    logger.info(f"Starting analysis for station {station_id}, runs: {run_numbers}, backend: {backend}")
-
+    logger.info(f"Starting analysis for station {station_id}, runs: {run_numbers}, backend: {backend}, sampling rate: {sr}")
     # Set the plotting style
     set_plot_style()
 
@@ -981,7 +969,7 @@ if __name__ == "__main__":
 
     # Read data 
     ###### !!!!! Implement monitoring data !!!!! ######
-    spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info, glitch_arr = read_rnog_data(station_id, run_numbers, backend=backend) 
+    spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info, glitch_arr, block_offsets_arr = read_rnog_data(station_id, run_numbers, backend=backend, sampling_rate=sr) 
 
     # Normalize surface channel spectra
     norm_spec_arr, scale_factors = normalize_channels(spec_arr, freqs, downward_channels, upward_channels)
@@ -1142,8 +1130,14 @@ if __name__ == "__main__":
     # Trigger rate with thresholds plot
     fig_trigger, ax_rate, ax_thr = plot_trigger_rate_with_thresholds(station_id, event_info, downward_channels, upward_channels, run_label, day_interval, bin_width_initial=300, max_bins=800, save_location=save_location)
     
-    # Block offsets plot
-    plot_block_offsets_violin(trace_arr, event_info, all_channels, station_id, run_label, save_location)
+    ##### Block offsets
+    logger.info("Starting block offset analysis, results are not used to determine channel health, see warnings in the log file for channels with potential block offset issues. The block offsets are then removed.")
+    fit_block_offsets_before = get_block_offsets_before_removal(block_offsets_arr, event_info, all_channels)
+    fit_block_offsets_after = get_block_offsets_after_removal(trace_arr, event_info, all_channels, sampling_rate=sr)
+
+    block_offset_stats = block_offset_statistics(fit_block_offsets_before, fit_block_offsets_after, all_channels)
+    write_block_offset_results(block_offset_stats, station_id, run_label)
+    plot_block_offsets_violin_before_after_comparison(fit_block_offsets_before, fit_block_offsets_after, all_channels, station_id, run_label, save_location)
 
     # Debug plots
     if args.debug_plot:   
