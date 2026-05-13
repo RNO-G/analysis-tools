@@ -25,7 +25,7 @@ def get_event_info_from_monitoring_file(file):
     rms_arr = stack_if_object(EventSummary["rms"])
     max_abs_amplitude_arr = stack_if_object(EventSummary["max_abs_amplitude"])
     glitching_ts_arr = stack_if_object(EventSummary["glitching_test_statitic"]) # There is typo in the monitoring.root for glitch ts
-    block_offsets_arr = stack_if_object(EventSummary["block_offsets"])
+    block_offsets_arr = stack_if_object(EventSummary["block_offset"])
 
     return {
         "event_number_arr": event_number_arr, # (n_events,)
@@ -168,7 +168,9 @@ def read_multiple_runs(base_path, station_id, run_numbers):
 
     spectrum_keys = ["avg_spectrum", "avg_spectrum_force", "avg_spectrum_lt", "avg_spectrum_rf0", "avg_spectrum_rf1"] # (n_ch, n_freqs)
     channel_event_keys = ["rms_arr", "max_abs_amplitude_arr", "glitching_test_statistic_arr", "block_offsets_arr", "snr_arr"] # (n_ch, n_events)
-    event_keys = ["event_number_arr", "triggerType", "trigger_time_utc", "run_no", "station_id"] # (n_events,)
+    event_keys = ["event_number_arr", "triggerType", "trigger_time_utc", "run_no", "station_id"] # 1D arrays with shape (n_events,)
+
+    freqs = None
 
     for run_no in tqdm(run_numbers, desc=f"Reading monitoring and header files for runs between {run_numbers[0]} and {run_numbers[-1]} for station {station_id}"):
         logger.info(f"Reading monitoring and header files for run {run_no} for station {station_id}")
@@ -250,11 +252,11 @@ def read_multiple_runs(base_path, station_id, run_numbers):
         event_info_dict["station_id"] = header_info_dict["station_id"] # (n_events,)
 
         # Add runsummary 
-        event_info_dict["avg_spectrum"] = run_summary_dict["avg_spectrum"] # (n_ch, n_freqs)
-        event_info_dict["avg_spectrum_force"] = run_summary_dict["avg_spectrum_force"] # (n_ch, n_freqs)
-        event_info_dict["avg_spectrum_lt"] = run_summary_dict["avg_spectrum_lt"] # (n_ch, n_freqs)
-        event_info_dict["avg_spectrum_rf0"] = run_summary_dict["avg_spectrum_rf0"] #RADIANT0
-        event_info_dict["avg_spectrum_rf1"] = run_summary_dict["avg_spectrum_rf1"] #RADIANT1
+        event_info_dict["avg_spectrum"] = stack_if_object(run_summary_dict["avg_spectrum"]) # (n_ch, n_freqs)
+        event_info_dict["avg_spectrum_force"] = stack_if_object(run_summary_dict["avg_spectrum_force"]) # (n_ch, n_freqs)
+        event_info_dict["avg_spectrum_lt"] = stack_if_object(run_summary_dict["avg_spectrum_lt"]) # (n_ch, n_freqs)
+        event_info_dict["avg_spectrum_rf0"] = stack_if_object(run_summary_dict["avg_spectrum_rf0"]) #RADIANT0
+        event_info_dict["avg_spectrum_rf1"] = stack_if_object(run_summary_dict["avg_spectrum_rf1"]) #RADIANT1
 
         # Calculate SNR and add to event info dict
         snr_arr = calculate_snr(event_info_dict["max_abs_amplitude_arr"], event_info_dict["rms_arr"])
@@ -266,6 +268,9 @@ def read_multiple_runs(base_path, station_id, run_numbers):
         total_n_lt_triggers += run_summary_dict["n_lt_triggers"]
         total_n_rf0_triggers += run_summary_dict["n_rf0_triggers"]  
         total_n_rf1_triggers += run_summary_dict["n_rf1_triggers"]
+
+        if freqs is None:
+            freqs = stack_if_object(run_summary_dict["frequencies"]) # (n_freqs,)
 
         all_event_info.append(event_info_dict)
     
@@ -279,7 +284,8 @@ def read_multiple_runs(base_path, station_id, run_numbers):
         combined_event_info[key] = np.concatenate([event_info[key] for event_info in all_event_info], axis=0) # concatenate along events axis, so final shape is (n_events_total,)
     for key in spectrum_keys:
         combined_event_info[key] = np.stack([event_info[key] for event_info in all_event_info], axis=1) # stack along new axis for runs, so final shape is (n_ch, n_runs, n_freqs)
-
+    
+    combined_event_info["freqs"] = freqs # (n_freqs,)
     combined_event_info["total_n_events"] = total_n_events
     combined_event_info["total_n_force_triggers"] = total_n_force_triggers
     combined_event_info["total_n_lt_triggers"] = total_n_lt_triggers
