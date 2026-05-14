@@ -20,7 +20,7 @@ from config_files_sva.config_station import get_station_config, sampling_rate
 from config_files_sva.config_plotting import set_plot_style
 from read_rnog_data_nuradio import convert_events_information, read_rnog_data
 from analysis_functions_sva.spectral_analysis_sva import find_amplitude_ratio_in_band, find_amplitude_ratio_in_band_specific_bkg, excess_info_from_ratio, excess_info_from_ratio_specific_bkg, validate_excess_in_bands
-from config_files_sva.config_spectral_analysis import SPECTRAL_BANDS, ALPHA_SPEC, CI_THRESHOLDS_SPEC, NORMALIZATION_BAND
+from config_files_sva.config_spectral_analysis import SPECTRAL_BANDS, ALPHA_SPEC, CI_THRESHOLDS_SPEC, NORMALIZATION_BAND, LOG_RATIO_THRESHOLDS_SPEC
 import copy
 from analysis_functions_sva.snr_analysis_sva import calculate_statistics_log_snr, calculate_z_score_snr, symmetry_metrics_channel_z_score, symmetry_metrics_z_score, load_values_json, outlier_flag, find_outlier_details
 from analysis_functions_sva.vrms_analysis_sva import calculate_vrms, kde_modality, tail_fraction_and_trimmed_skew_two_sided, report_vrms_characteristics
@@ -34,7 +34,7 @@ from plotting_functions_sva.plotting_sva_snr import choose_day_interval, plot_sn
 from plotting_functions_sva.plotting_sva_vrms import plot_vrms_values_against_time
 from plotting_functions_sva.plotting_sva_glitch import glitching_violin_plot, choose_bin_size, plot_glitch_q99_over_time
 from plotting_functions_sva.plotting_sva_debug import debug_plot_ratios, debug_plot_snr_distribution, debug_plot_z_score_snr, debug_plot_vrms_distribution
-
+from monitoring_data_functions_sva.get_monitoring_data_uproot import choose_trigger_type_header, read_multiple_runs
 
 #### Script directory for json files
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -456,12 +456,16 @@ def write_block_offset_results(block_offset_stats, station_id, run_label):
 if __name__ == "__main__":
 
     argparser = ArgumentParser(description="RNO-G Science Verification Analysis")
+    
+    argparser.add_argument("-m", "--method", type=str, default="monitoring", choices=["monitoring", "dataProviderRNOG"], required=True, help= "Method to read data, should be either 'monitoring' for reading monitoring data from monitoring.root with uproot or 'dataProviderRNOG' for reading with the data provider "
+    "(default: monitoring, which is faster and goes through all events (can be only used for data later than 2026!), dataProviderRNOG only reads events stored in combined.root found in /inbox/), e.g. --method monitoring or --method dataProviderRNOG")
+    
     argparser.add_argument("-st", "--station_id", type=int, required=True, help="Station to analyze, e.g --station_id 14")
-    argparser.add_argument("-b", "--backend", type=str, default="pyroot", help="Backend to use for reading data, should be either pyroot or uproot (default: pyroot), e.g. --backend pyroot or --backend uproot")
+    argparser.add_argument("-b", "--backend", type=str, default="pyroot", help="!!! Only needed for method 'monitoring' !!!. Backend to use for reading data, should be either pyroot or uproot (default: pyroot), e.g. --backend pyroot or --backend uproot")
     argparser.add_argument("-sl", "--save_location", type=str, default=PLOTS_DIR, help="Location to save the output plots (default: plots directory under script directory), e.g. --save_location /path/to/save/plots")
     argparser.add_argument("-ex", "--exclude-runs", nargs="+", type=int, default=[], metavar="RUN", help="Run number(s) to exclude, e.g. --exclude-runs 1005 1010")
     argparser.add_argument("--debug_plot", action="store_true", help="If set, will create debug plots.")
-    argparser.add_argument("--sampling_rate", type=str, default= "after_2024", choices=["before_2024", "after_2024"], help="Sampling rate to use, choices are 'before_2024' (3.2 GHz) and 'after_2024' (2.4 GHz), default is 'after_2024'.")
+    argparser.add_argument("--sampling_rate", type=str, default= "after_2024", choices=["before_2024", "after_2024"], help="!!! Only needed for method 'monitoring' !!!. Sampling rate to use, choices are 'before_2024' (3.2 GHz) and 'after_2024' (2.4 GHz), default is 'after_2024'.")
 
     run_selection = argparser.add_mutually_exclusive_group(required=True)
     run_selection.add_argument("--runs", nargs="+", type=int, metavar="RUN_NUMBERS",
@@ -473,6 +477,15 @@ if __name__ == "__main__":
 
 
     args = argparser.parse_args()
+
+    use_monitoring = True # Default is monitoring data, will be set based on the method argument
+    method = args.method
+
+    if method == "dataProviderRNOG":
+        use_monitoring = False
+        logger.info("Using dataProviderRNOG method to read data")
+    else:
+        logger.info("Using monitoring method to read data")
 
     station_id = args.station_id
     backend = args.backend
@@ -530,26 +543,67 @@ if __name__ == "__main__":
     reference_channels_galaxy = config["reference_channels_galaxy"]
     reference_channels = config["reference_channels"]
 
+    base_data_path = "/pnfs/ifh.de/acs/radio/diskonly/data/inbox/"
+
     # Read data 
     ###### !!!!! Implement monitoring data !!!!! ######
-    spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info, glitch_arr, block_offsets_arr = read_rnog_data(station_id, run_numbers, backend=backend, sampling_rate=sr) 
+    if use_monitoring == False:
+        spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info, glitch_arr, block_offsets_arr = read_rnog_data(station_id, run_numbers, backend=backend, sampling_rate=sr) 
+        
+        # Normalize surface channel spectra
+        norm_spec_arr, scale_factors = normalize_channels(spec_arr, freqs, downward_channels, upward_channels)
+        logger.debug(f"Event info trigger type: {event_info['triggerType']}")
+        logger.debug(f"Spec arr shape: {spec_arr.shape}, Norm spec arr shape: {norm_spec_arr.shape}")
 
-    # Normalize surface channel spectra
-    norm_spec_arr, scale_factors = normalize_channels(spec_arr, freqs, downward_channels, upward_channels)
-    logger.debug(f"Event info trigger type: {event_info['triggerType']}")
-    logger.debug(f"Spec arr shape: {spec_arr.shape}, Norm spec arr shape: {norm_spec_arr.shape}")
+        # Select FORCE trigger events
+        force_mask = choose_trigger_type(event_info, "FORCE")
 
-    # Select FORCE trigger events
-    force_mask = choose_trigger_type(event_info, "FORCE")
+        ###### Spectral analysis for FORCE trigger events only
+        spec_arr_force = spec_arr[:, force_mask, :]
+        norm_spec_arr_force = norm_spec_arr[:, force_mask, :]
+        logger.info(f"Number of FORCE trigger events: {spec_arr_force.shape[1]}")
 
-    ###### Spectral analysis for FORCE trigger events only
-    spec_arr_force = spec_arr[:, force_mask, :]
-    norm_spec_arr_force = norm_spec_arr[:, force_mask, :]
-    logger.info(f"Number of FORCE trigger events: {spec_arr_force.shape[1]}")
+        if len(spec_arr_force[1]) < 30:
+            logger.warning("Less than 30 FORCE-trigger events, results of the sign test may not be reliable.")
+        lt_mask = choose_trigger_type(event_info, "LT")
+        spec_arr_lt = spec_arr[:, lt_mask, :]
 
-    if len(spec_arr_force[1]) < 30:
-        logger.warning("Less than 30 FORCE-trigger events, results of the sign test may not be reliable.")
+        radiant0_mask = choose_trigger_type(event_info, "RADIANT0")
+        spec_arr_radiant0 = spec_arr[:, radiant0_mask, :]
 
+        radiant1_mask = choose_trigger_type(event_info, "RADIANT1")
+        spec_arr_radiant1 = spec_arr[:, radiant1_mask, :]  
+
+    elif use_monitoring == True:
+        combined_event_info = read_multiple_runs(base_path = base_data_path, station_id = station_id, run_numbers=run_numbers)
+        run_no = combined_event_info["run_no"]
+        freqs = combined_event_info["freqs"]
+        rms_arr = combined_event_info["rms_arr"]
+        glitch_arr = combined_event_info["glitching_test_statistic_arr"]
+        block_offsets_arr = combined_event_info["block_offsets_arr"]
+        snr_arr = combined_event_info["snr_arr"]
+        trigger_type_arr = combined_event_info["triggerType"]
+        times = combined_event_info["trigger_time_utc"]
+        avg_spectrum = combined_event_info["avg_spectrum"]
+        spec_arr_force = combined_event_info["avg_spectrum_force"]
+        spec_arr_lt = combined_event_info["avg_spectrum_lt"]
+        spec_arr_radiant0 = combined_event_info["avg_spectrum_rf0"]
+        spec_arr_radiant1 = combined_event_info["avg_spectrum_rf1"]
+        max_abs_amplitude_arr = combined_event_info["max_abs_amplitude_arr"]
+        event_number_arr = combined_event_info["event_number_arr"]
+        total_n_events = combined_event_info["total_n_events"]
+        total_n_force_triggers = combined_event_info["total_n_force_triggers"]
+        total_n_lt_triggers = combined_event_info["total_n_lt_triggers"]
+        total_n_radiant0_triggers = combined_event_info["total_n_rf0_triggers"]
+        total_n_radiant1_triggers = combined_event_info["total_n_rf1_triggers"]
+
+        norm_spec_arr_force, scale_factors_force = normalize_channels(spec_arr_force, freqs, downward_channels, upward_channels)
+        force_mask = choose_trigger_type_header(trigger_type_arr, "FORCE")
+    
+    else:
+        raise ValueError("Invalid method for reading data, should be either 'monitoring' or 'dataProviderRNOG'")
+    
+    # Bands for spectral analysis
     band_config = copy.deepcopy(SPECTRAL_BANDS)
 
     for band_name in band_config:
@@ -572,7 +626,7 @@ if __name__ == "__main__":
     all_excess_info = {}
     all_validation_results = {}
 
-    logger.info("Starting spectral analysis for FORCE trigger events...")
+    logger.info("Starting spectral analysis for FORCE trigger events. !!! Different methods for monitoring and dataProviderRNOG !!! ")
     for ch in surface_channels:
         i = ch_to_idx[ch]
         ratio_arr_dict_ch = {}
@@ -580,25 +634,14 @@ if __name__ == "__main__":
         for band_name, ratio_arr in ratio_arr_dict.items():
             ratio_arr_dict_ch[band_name] = ratio_arr[i]
 
-        excess_info_results = excess_info_from_ratio_specific_bkg(ratio_arr_dict_ch, ALPHA_SPEC, CI_THRESHOLDS_SPEC)
+        excess_info_results = excess_info_from_ratio_specific_bkg(ratio_arr_dict_ch, ALPHA_SPEC, CI_THRESHOLDS_SPEC, use_monitoring=use_monitoring, log_ratio_thresholds=LOG_RATIO_THRESHOLDS_SPEC)
         validation_results = validate_excess_in_bands(excess_info_results)
 
         all_excess_info[ch] = excess_info_results
         all_validation_results[ch] = validation_results
 
         # Write detailed spectral results to text file for each channel
-        write_spectral_results(ch, excess_info_results, station_id, run_label, log_once=(ch==surface_channels[-1]), reset_file=(ch==surface_channels[0]))
-    
-
-    # Select other trigger types and plot them
-    lt_mask = choose_trigger_type(event_info, "LT")
-    spec_arr_lt = spec_arr[:, lt_mask, :]
-
-    radiant0_mask = choose_trigger_type(event_info, "RADIANT0")
-    spec_arr_radiant0 = spec_arr[:, radiant0_mask, :]
-
-    radiant1_mask = choose_trigger_type(event_info, "RADIANT1")
-    spec_arr_radiant1 = spec_arr[:, radiant1_mask, :]       
+        write_spectral_results(ch, excess_info_results, station_id, run_label, log_once=(ch==surface_channels[-1]), reset_file=(ch==surface_channels[0]))    
 
     # Surface spectrum
     plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_force, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label="force")

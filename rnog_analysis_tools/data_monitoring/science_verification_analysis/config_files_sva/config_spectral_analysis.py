@@ -10,3 +10,4 @@ SPECTRAL_BANDS = {
 ALPHA_SPEC = 0.005
 CI_THRESHOLDS_SPEC = (0.6, 0.75)
 NORMALIZATION_BAND = {"freq_min": 500*units.MHz, "freq_max": 650*units.MHz}
+LOG_RATIO_THRESHOLDS_SPEC = (0.02, 0.05, 0.1) # (no_excess, weak_excess, moderate_excess)

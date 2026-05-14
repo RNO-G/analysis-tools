@@ -275,7 +275,7 @@ def read_multiple_runs(base_path, station_id, run_numbers):
         all_event_info.append(event_info_dict)
     
     if len(all_event_info) == 0:
-        raise ValueError(f"No valid runs were processed for station {station_id}. Please check the files and the run numbers. Or try reading using the rnog data reader")
+        raise ValueError(f"No valid runs were processed for station {station_id}. Please check the files and the run numbers. Or try reading using the dataProviderRNOG method which reads from combined.root files in /inbox/ and can be used for older data before 2026 which do not have monitoring.root files.")
     
     combined_event_info = {}
     for key in channel_event_keys:

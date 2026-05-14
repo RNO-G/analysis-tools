@@ -40,51 +40,78 @@ def find_amplitude_ratio_in_band_specific_bkg(freqs, norm_spec_arr, upward_chann
         ratio_arr_dict[band_name] = ratio_arr
 
     return ratio_arr_dict
-    
-def excess_info_from_ratio(ratio_arr, band_name, alpha, ci_thresholds):
-    '''Calculate excess information from amplitude ratios in frequency bands.'''
+
+def excess_info_from_ratio(ratio_arr, band_name, alpha, ci_thresholds, use_monitoring, log_ratio_thresholds):
+    '''Calculate excess information from amplitude ratios in frequency bands. Different methods are applied depending on whether monitoring data is used or not. 
+    If monitoring data is used, log ratio thresholds are applied for excess validation. If not, a binomial test is applied to calculate p-value and confidence intervals for excess validation.'''
 
     log_ratio = np.log10(np.asarray(ratio_arr))
     median_log_ratio = np.median(log_ratio)
     mean_log_ratio = np.mean(log_ratio)
-    frac_pos_to_neg = np.mean(log_ratio > 0)/np.mean(log_ratio < 0) if np.mean(log_ratio < 0) != 0 else np.inf
 
-    k = np.sum(log_ratio > 0)
-    n = int(log_ratio.size)
-    result = binomtest(k, n, p=0.5, alternative="greater")
-    pval = result.pvalue
-    statistic = result.statistic
-    confidence_interval = result.proportion_ci(confidence_level=0.99)
+    if use_monitoring:
+        logger.info(f"Using monitoring data, applying log ratio thresholds for excess validation: {log_ratio_thresholds}")
+        std_log_ratio = np.std(log_ratio)
+        n_runs = len(log_ratio)
 
-    if pval > alpha:
-        validation = "NO EXCESS"
-    else:
-        if confidence_interval.low > ci_thresholds[1]:
-            validation = f"STRONG EXCESS in {band_name}"
-        elif confidence_interval.low > ci_thresholds[0]:
+        no_excess, weak_excess, moderate_excess = log_ratio_thresholds
+
+        if median_log_ratio < no_excess:
+            validation = "NO EXCESS"
+        elif median_log_ratio < weak_excess:
+            validation = f"WEAK EXCESS in {band_name}"
+        elif median_log_ratio < moderate_excess:
             validation = f"MODERATE EXCESS in {band_name}"
-        else: 
-            validation = f"WEAK EXCESS in {band_name}"       
+        else:
+            validation = f"STRONG EXCESS in {band_name}"
+        return {
+            "median_log_ratio": median_log_ratio,
+            "mean_log_ratio": mean_log_ratio,
+            "std_log_ratio": std_log_ratio,
+            "n_runs": n_runs,
+            "validation": validation
+        }
+    
+    else: 
+        frac_pos_to_neg = np.mean(log_ratio > 0)/np.mean(log_ratio < 0) if np.mean(log_ratio < 0) != 0 else np.inf
 
-    return {
-        "median_log_ratio": median_log_ratio,
-        "mean_log_ratio": mean_log_ratio,
-        "99% CI": confidence_interval,
-        "statistic - k over n": statistic,
-        "frac_pos_to_neg": frac_pos_to_neg,
-        "pval": pval,
-        "validation": validation
-    }
+        k = np.sum(log_ratio > 0)
+        n = int(log_ratio.size)
+        result = binomtest(k, n, p=0.5, alternative="greater")
+        pval = result.pvalue
+        statistic = result.statistic
+        confidence_interval = result.proportion_ci(confidence_level=0.99)
 
-def excess_info_from_ratio_specific_bkg(ratio_arr_dict, alpha=0.005, ci_thresholds=(0.6, 0.75)):
+        if pval > alpha:
+            validation = "NO EXCESS"
+        else:
+            if confidence_interval.low > ci_thresholds[1]:
+                validation = f"STRONG EXCESS in {band_name}"
+            elif confidence_interval.low > ci_thresholds[0]:
+                validation = f"MODERATE EXCESS in {band_name}"
+            else: 
+                validation = f"WEAK EXCESS in {band_name}"       
+
+        return {
+            "median_log_ratio": median_log_ratio,
+            "mean_log_ratio": mean_log_ratio,
+            "99% CI": confidence_interval,
+            "statistic - k over n": statistic,
+            "frac_pos_to_neg": frac_pos_to_neg,
+            "pval": pval,
+            "validation": validation
+        }
+
+def excess_info_from_ratio_specific_bkg(ratio_arr_dict, alpha=0.005, ci_thresholds=(0.6, 0.75), use_monitoring=False, log_ratio_thresholds=None):
     '''Calculate excess information from amplitude ratios in specific frequency bands.'''
     excess_info_dict = {}
     for band_name, ratio_arr in ratio_arr_dict.items():
-        excess_info = excess_info_from_ratio(ratio_arr, band_name, alpha, ci_thresholds)
+        excess_info = excess_info_from_ratio(ratio_arr, band_name, alpha, ci_thresholds, use_monitoring, log_ratio_thresholds)
         excess_info_dict[band_name] = excess_info
 
     return excess_info_dict
 
+# Validation
 def validate_excess_in_bands(excess_info_dict):
     '''Validate excess in different frequency bands based on excess information.'''
     validation_dict = {}
