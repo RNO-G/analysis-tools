@@ -50,7 +50,6 @@ def excess_info_from_ratio(ratio_arr, band_name, alpha, ci_thresholds, use_monit
     mean_log_ratio = np.mean(log_ratio)
 
     if use_monitoring:
-        logger.info(f"Using monitoring data, applying log ratio thresholds for excess validation: {log_ratio_thresholds}")
         std_log_ratio = np.std(log_ratio)
         n_runs = len(log_ratio)
 
@@ -59,11 +58,11 @@ def excess_info_from_ratio(ratio_arr, band_name, alpha, ci_thresholds, use_monit
         if median_log_ratio < no_excess:
             validation = "NO EXCESS"
         elif median_log_ratio < weak_excess:
-            validation = f"WEAK EXCESS in {band_name}"
+            validation = f"WEAK EXCESS"
         elif median_log_ratio < moderate_excess:
-            validation = f"MODERATE EXCESS in {band_name}"
+            validation = f"MODERATE EXCESS"
         else:
-            validation = f"STRONG EXCESS in {band_name}"
+            validation = f"STRONG EXCESS"
         return {
             "median_log_ratio": median_log_ratio,
             "mean_log_ratio": mean_log_ratio,
@@ -86,11 +85,11 @@ def excess_info_from_ratio(ratio_arr, band_name, alpha, ci_thresholds, use_monit
             validation = "NO EXCESS"
         else:
             if confidence_interval.low > ci_thresholds[1]:
-                validation = f"STRONG EXCESS in {band_name}"
+                validation = f"STRONG EXCESS"
             elif confidence_interval.low > ci_thresholds[0]:
-                validation = f"MODERATE EXCESS in {band_name}"
+                validation = f"MODERATE EXCESS"
             else: 
-                validation = f"WEAK EXCESS in {band_name}"       
+                validation = f"WEAK EXCESS"       
 
         return {
             "median_log_ratio": median_log_ratio,

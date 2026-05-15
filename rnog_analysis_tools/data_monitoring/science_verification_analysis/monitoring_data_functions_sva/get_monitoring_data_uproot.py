@@ -166,6 +166,8 @@ def read_multiple_runs(base_path, station_id, run_numbers):
     total_n_rf0_triggers = 0
     total_n_rf1_triggers = 0
 
+    run_event_counts = {}
+
     spectrum_keys = ["avg_spectrum", "avg_spectrum_force", "avg_spectrum_lt", "avg_spectrum_rf0", "avg_spectrum_rf1"] # (n_ch, n_freqs)
     channel_event_keys = ["rms_arr", "max_abs_amplitude_arr", "glitching_test_statistic_arr", "block_offsets_arr", "snr_arr"] # (n_ch, n_events)
     event_keys = ["event_number_arr", "triggerType", "trigger_time_utc", "run_no", "station_id"] # 1D arrays with shape (n_events,)
@@ -269,6 +271,15 @@ def read_multiple_runs(base_path, station_id, run_numbers):
         total_n_rf0_triggers += run_summary_dict["n_rf0_triggers"]  
         total_n_rf1_triggers += run_summary_dict["n_rf1_triggers"]
 
+        # Add event counts for this run to the run_event_counts dict
+        run_event_counts[run_no] = {
+            "n_events": run_summary_dict["n_events"],
+            "n_forced_triggers": run_summary_dict["n_forced_triggers"],
+            "n_lt_triggers": run_summary_dict["n_lt_triggers"],
+            "n_rf0_triggers": run_summary_dict["n_rf0_triggers"],
+            "n_rf1_triggers": run_summary_dict["n_rf1_triggers"],
+        }
+
         if freqs is None:
             freqs = stack_if_object(run_summary_dict["frequencies"]) # (n_freqs,)
 
@@ -291,6 +302,7 @@ def read_multiple_runs(base_path, station_id, run_numbers):
     combined_event_info["total_n_lt_triggers"] = total_n_lt_triggers
     combined_event_info["total_n_rf0_triggers"] = total_n_rf0_triggers
     combined_event_info["total_n_rf1_triggers"] = total_n_rf1_triggers
+    combined_event_info["run_event_counts"] = run_event_counts # dict with run number as key and value as another dict with n_events, n_forced_triggers, n_lt_triggers, n_rf0_triggers, n_rf1_triggers for that run
 
     logger.info(f"Successfully read and combined data from {len(all_event_info)} runs for station {station_id} using the monitoring data. Total events: {total_n_events}, total FORCE triggers: {total_n_force_triggers}, total LT triggers: {total_n_lt_triggers}, total RADIANT0 triggers: {total_n_rf0_triggers}, total RADIANT1 triggers: {total_n_rf1_triggers}.")
 

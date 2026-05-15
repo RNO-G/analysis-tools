@@ -66,7 +66,14 @@ def debug_plot_z_score_snr(z_score_arr, channel_list, save_location, station_id,
     fig.savefig(os.path.join(save_location,f"debug_z_score_snr_force_trigger_{station_id}_{run_label}.pdf",))
     plt.close(fig)
 
-def debug_plot_vrms_distribution(vrms_arr, modality_dict, channel_list, station_id, run_label, trigger_label, save_location, n_rows=12, n_cols=2):
+def debug_plot_vrms_distribution(vrms_arr, modality_dict, channel_list, station_id, run_label, trigger_label, save_location, n_rows=12, n_cols=2, use_monitoring=False):
+    if use_monitoring:
+        unit_label = "RMS [ADC]"
+        plot_label = "RMS"
+    else: 
+        unit_label = "Vrms Values [V]"
+        plot_label = "Vrms"
+    
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 36))
     axes = axes.flatten()
 
@@ -98,11 +105,11 @@ def debug_plot_vrms_distribution(vrms_arr, modality_dict, channel_list, station_
             ax.plot(vrms_grid[peaks], kde_values[peaks], "ro", markersize=5)
 
         ax.set_title(f"Ch {ch}: {modality}")
-        ax.set_xlabel("Vrms Values [V]")
+        ax.set_xlabel(unit_label)
         ax.set_ylabel("KDE Density")
 
     for i in range(len(channel_list), n_rows * n_cols):
         axes[i].axis("off")
 
     plt.tight_layout()
-    plt.savefig(os.path.join(save_location,f"debug_vrms_hist_kde_density_peaks_{station_id}_{run_label}_{trigger_label}.pdf",))
+    plt.savefig(os.path.join(save_location,f"debug_{plot_label.lower()}_hist_kde_density_peaks_{station_id}_{run_label}_{trigger_label}.pdf",))

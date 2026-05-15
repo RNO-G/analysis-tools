@@ -77,9 +77,13 @@ def outlier_flag(z_score_log, k_values_log, channel_list):
 
     return flag
 
-def find_outlier_details(z_score_log, k_values_log, flag, event_info, channel_list):
+def find_outlier_details(z_score_log, k_values_log, flag, channel_list, run_no, event_number):
     '''Find details of outlier events for each channel.'''
     outlier_details = {}
+
+    # Sanity check:
+    if flag.shape[1] != len(run_no) or flag.shape[1] != len(event_number):
+        raise ValueError("Length of run_no and event_number arrays must match the number of events in the z_score_log and flag arrays.")
 
     for ch in channel_list:
         outlier_indices = np.where(flag[ch, :])[0]
@@ -88,10 +92,10 @@ def find_outlier_details(z_score_log, k_values_log, flag, event_info, channel_li
             z_abs = np.abs(z_score_log[ch, idx])
             k_ch = k_values_log[ch]
             delta = z_abs - k_ch
-
+            
             details_ch.append({
-                "run": int(event_info["run"][idx]),
-                "eventNumber": int(event_info["eventNumber"][idx]),
+                "run": int(run_no[idx]),
+                "eventNumber": int(event_number[idx]),
                 "z_abs": float(z_abs),
                 "k": float(k_ch),
                 "z_minus_k": float(delta),

@@ -5,13 +5,14 @@ import matplotlib.dates as mdates
 from datetime import timezone
 
 #### Vrms Plots ####
-def plot_vrms_values_against_time(event_info, times, vrms_arr_all, channel_list, station_id, run_label, save_location, n_rows = 12, n_cols = 2, day_interval=5):
-    '''Plot Vrms distributions for different trigger types.'''
-
-    force_mask = event_info["triggerType"] == "FORCE"
-    radiant0_mask = event_info["triggerType"] == "RADIANT0"
-    radiant1_mask = event_info["triggerType"] == "RADIANT1"
-    lt_mask = event_info["triggerType"] == "LT"
+def plot_vrms_values_against_time(times, vrms_arr_all, channel_list, station_id, run_label, save_location, force_mask, radiant0_mask, radiant1_mask, lt_mask, n_rows = 12, n_cols = 2, day_interval=5, use_monitoring=False):
+    '''Plot RMS (for monitoring.root) or Vrms (for dataProviderRNOG) distributions for different trigger types.'''
+    if use_monitoring:
+        unit_label = "RMS [ADC]"
+        plot_label = "RMS"
+    else:
+        unit_label = r"$V_\mathrm{rms}$ [V]"
+        plot_label = "Vrms"
 
     trigger_masks = {"FORCE": force_mask, 
                      "RADIANT0": radiant0_mask,
@@ -69,8 +70,8 @@ def plot_vrms_values_against_time(event_info, times, vrms_arr_all, channel_list,
     fig.legend(handles=[legend_handles[k] for k in trigger_masks.keys()], labels=list(trigger_masks.keys()), 
                loc="lower center", ncol=4, frameon=True, markerscale=2, bbox_to_anchor=(0.5, 0.005))
     
-    fig.supylabel(r"$V_\mathrm{rms}$ [V]", x=0.02)
+    fig.supylabel(unit_label, x=0.02)
     plt.subplots_adjust(bottom = 0.05, wspace = 0.15, left=0.1)
     fig.supxlabel("Date [UTC]", x = 0.5, y = 0.06)
-    plt.savefig(os.path.join(save_location, f"vrms_against_time_{station_id}_{run_label}.pdf"))
+    plt.savefig(os.path.join(save_location, f"{plot_label.lower()}_against_time_{station_id}_{run_label}.pdf"))
     plt.close(fig)

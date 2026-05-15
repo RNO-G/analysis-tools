@@ -5,22 +5,50 @@ import matplotlib.dates as mdates
 import numpy as np
 from NuRadioReco.utilities import units
 import os
+import logging
+
+logger = logging.getLogger(__name__)
+
+TRIGGER_MAP = {
+    "force" : "n_forced_triggers",
+    "lt" : "n_lt_triggers",
+    "radiant0" : "n_rf0_triggers",
+    "radiant1" : "n_rf1_triggers",
+}
+
+def get_weights_if_monitoring(trigger_label, use_monitoring=False, run_event_counts=None):
+    '''Helper function to get weights for averaging spectra if using monitoring data, otherwise return None.'''
+    if use_monitoring and run_event_counts is not None:
+        weight_key = TRIGGER_MAP[trigger_label.lower()]
+        n_events_per_run_trigger = np.array([run_event_counts[run_no][weight_key] for run_no in run_event_counts])
+        unit_label = "ADC Counts"
+        return n_events_per_run_trigger, unit_label
+    else:
+        unit_label = "V/GHz"
+        return None, unit_label
 
 #### Spectrum Plots ####
-def plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label):
-    '''Plot time-integrated surface channel spectra.'''
+def plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label, use_monitoring = False, run_event_counts = None):
+    '''Plot time-integrated surface channel spectra. Use weighted average if use_monitoring is True and run_event_counts is provided, otherwise use simple average.'''
     plt.figure(figsize=(10, 6))
+    weights, unit_label = get_weights_if_monitoring(trigger_label, use_monitoring, run_event_counts)
     for ch in upward_channels:
-        spec_mean = np.mean(spec_arr[ch, :, :], axis=0)
-        plt.plot(freqs / units.MHz, spec_mean, label=f'Ch {ch} (up)', linestyle='-')
+        if weights is not None:
+            spec_mean = np.average(spec_arr[ch, :, :], axis=0, weights=weights)
+        else:
+            spec_mean = np.mean(spec_arr[ch, :, :], axis=0)
+        plt.plot(freqs[1:] / units.MHz, spec_mean[1:], label=f'Ch {ch} (up)', linestyle='-')
     for ch in downward_channels:
-        spec_mean = np.mean(spec_arr[ch, :, :], axis=0)
-        plt.plot(freqs / units.MHz, spec_mean, label=f'Ch {ch} (down)', linestyle='--')
+        if weights is not None:
+             spec_mean = np.average(spec_arr[ch, :, :], axis=0, weights=weights)
+        else:
+            spec_mean = np.mean(spec_arr[ch, :, :], axis=0)
+        plt.plot(freqs[1:] / units.MHz, spec_mean[1:], label=f'Ch {ch} (down)', linestyle='--')
 
     plt.xlabel('Frequency [MHz]')
     plt.xlim(50, 800)
-    plt.ylim(0, 5)
-    plt.ylabel('Amplitude Spectrum [V/GHz]')
+    #plt.ylim(0, 5)
+    plt.ylabel(f'Amplitude Spectrum [{unit_label}]')
     plt.title(f'Time-Integrated Spectrum of Surface Channels  ({trigger_label} Trigger)')
     plt.legend(loc="upper right", 
                frameon=True,
@@ -30,16 +58,25 @@ def plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr, freq
     plt.grid()
     plt.tight_layout()
     plt.savefig(os.path.join(save_location, f"{trigger_label}_time_integrated_surface_spectra_unnormalized_{station_id}_{run_label}.pdf"))
+    plt.close()
 
-def plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr, freqs, upward_channels, downward_channels, save_location, run_label):
-    '''Plot time-integrated surface channel spectra.'''
+def plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr, freqs, upward_channels, downward_channels, save_location, run_label, use_monitoring = False, run_event_counts = None):
+    '''Plot time-integrated normalized surface channel spectra for FORCE trigger events. Use weighted average if use_monitoring is True and run_event_counts is provided, otherwise use simple average.'''
     plt.figure(figsize=(10, 6))
+    trigger_label = "force"
+    weights, unit_label = get_weights_if_monitoring(trigger_label, use_monitoring, run_event_counts)
     for ch in upward_channels:
-        spec_mean = np.mean(norm_spec_arr[ch, :, :], axis=0)
-        plt.plot(freqs / units.MHz, spec_mean, label=f'Ch {ch} (up)', linestyle='-')
+        if weights is not None:
+            spec_mean = np.average(norm_spec_arr[ch, :, :], axis=0, weights=weights)
+        else:
+            spec_mean = np.mean(norm_spec_arr[ch, :, :], axis=0)
+        plt.plot(freqs[1:] / units.MHz, spec_mean[1:], label=f'Ch {ch} (up)', linestyle='-')
     for ch in downward_channels:
-        spec_mean = np.mean(norm_spec_arr[ch, :, :], axis=0)
-        plt.plot(freqs / units.MHz, spec_mean, label=f'Ch {ch} (down)', linestyle='--')
+        if weights is not None:
+            spec_mean = np.average(norm_spec_arr[ch, :, :], axis=0, weights=weights)
+        else:
+            spec_mean = np.mean(norm_spec_arr[ch, :, :], axis=0)
+        plt.plot(freqs[1:] / units.MHz, spec_mean[1:], label=f'Ch {ch} (down)', linestyle='--')
 
     periodiccolor2 = "mediumseagreen"
     excesscolor = 'grey'
@@ -59,9 +96,9 @@ def plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr, f
 
     plt.xlabel('Frequency [MHz]')
     plt.xlim(50, 800)
-    plt.ylim(0, 5)
-    plt.ylabel('Amplitude Spectrum [V/GHz]')
-    plt.title('Time-Integrated Spectrum of Surface Channels (FORCE Trigger)')
+    #plt.ylim(0, 5)
+    plt.ylabel(f'Amplitude Spectrum [{unit_label}]')
+    plt.title(f'Time-Integrated Spectrum of Surface Channels (FORCE Trigger)')
     
     ax = plt.gca()
     line_legend = ax.legend(
@@ -90,21 +127,29 @@ def plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr, f
     plt.grid()
     plt.tight_layout()
     plt.savefig(os.path.join(save_location, f"time_integrated_surface_spectra_normalized_force_trigger_{station_id}_{run_label}.pdf"))
+    plt.close()
 
-def plot_time_integrated_deep_spectra(station_id, spec_arr, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label):
-    '''Plot time-integrated deep channel spectra.'''
+def plot_time_integrated_deep_spectra(station_id, spec_arr, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label, use_monitoring = False, run_event_counts = None):
+    '''Plot time-integrated deep channel spectra. Use weighted average if use_monitoring is True and run_event_counts is provided, otherwise use simple average.'''
     plt.figure(figsize=(10, 6))
+    weights, unit_label = get_weights_if_monitoring(trigger_label, use_monitoring, run_event_counts)
     for ch in vpol_channels:
-        spec_mean = np.mean(spec_arr[ch, :, :], axis=0)
-        plt.plot(freqs / units.MHz, spec_mean, label=f'Ch {ch} (VPOL)', linestyle='-')
+        if weights is not None:
+            spec_mean = np.average(spec_arr[ch, :, :], axis=0, weights=weights)
+        else:
+            spec_mean = np.mean(spec_arr[ch, :, :], axis=0)
+        plt.plot(freqs[1:] / units.MHz, spec_mean[1:], label=f'Ch {ch} (VPOL)', linestyle='-')
     for ch in hpol_channels:
-        spec_mean = np.mean(spec_arr[ch, :, :], axis=0)
-        plt.plot(freqs / units.MHz, spec_mean, label=f'Ch {ch} (HPOL)', linestyle='--')
+        if weights is not None:
+            spec_mean = np.average(spec_arr[ch, :, :], axis=0, weights=weights)
+        else:
+            spec_mean = np.mean(spec_arr[ch, :, :], axis=0)
+        plt.plot(freqs[1:] / units.MHz, spec_mean[1:], label=f'Ch {ch} (HPOL)', linestyle='--')
 
     plt.xlabel('Frequency [MHz]')
     plt.xlim(50, 800)
-    plt.ylim(0, 5)
-    plt.ylabel('Amplitude Spectrum [V/GHz]')
+    #plt.ylim(0, 5)
+    plt.ylabel(f'Amplitude Spectrum [{unit_label}]')
     plt.title(f'Time-Integrated Spectrum of Deep Channels ({trigger_label} Trigger)')
     plt.legend(loc="upper right", 
                frameon=True,
@@ -114,3 +159,4 @@ def plot_time_integrated_deep_spectra(station_id, spec_arr, freqs, vpol_channels
     plt.grid()
     plt.tight_layout()
     plt.savefig(os.path.join(save_location, f"{trigger_label}_time_integrated_deep_spectra_unnormalized_{station_id}_{run_label}.pdf"))
+    plt.close()

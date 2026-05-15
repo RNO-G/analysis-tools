@@ -6,6 +6,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# For dataProbiderRNOG
 def calculate_vrms(trace_arr, event_info):
     '''Calculate Vrms for each channel and event according to trigger types.'''
     vrms_arr = np.std(trace_arr, axis=2)  # (n_channels, n_events)
@@ -21,6 +22,18 @@ def calculate_vrms(trace_arr, event_info):
     vrms_arr_lt = vrms_arr[:, lt_mask]
 
     return vrms_arr, vrms_arr_force, vrms_arr_radiant0, vrms_arr_radiant1, vrms_arr_lt
+
+def get_rms_per_trigger_monitoring(rms_arr, force_mask, lt_mask, radiant0_mask, radiant1_mask):
+    '''Get RMS values for each channel and event according to trigger types for monitoring data.'''
+    
+    # Still named Vrms to keep consistent with the dataProviderRNOG case, but these are actually RMS values calculated in the monitoring pipeline, not Vrms calculated from traces as in the dataProviderRNOG case. The analysis functions will be the same for both cases, just the input values are different.
+    vrms_arr = rms_arr  # (n_channels, n_events)
+    vrms_arr_force = rms_arr[:, force_mask]
+    vrms_arr_lt = rms_arr[:, lt_mask]
+    vrms_arr_radiant0 = rms_arr[:, radiant0_mask]
+    vrms_arr_radiant1 = rms_arr[:, radiant1_mask]
+
+    return vrms_arr,vrms_arr_force, vrms_arr_radiant0, vrms_arr_radiant1, vrms_arr_lt
 
 def kde_modality(vrms_arr, channel_list, kde_modality_config=None):
     '''Calculate KDE and modality for Vrms distributions.'''

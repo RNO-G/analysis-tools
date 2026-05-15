@@ -23,11 +23,12 @@ from analysis_functions_sva.spectral_analysis_sva import find_amplitude_ratio_in
 from config_files_sva.config_spectral_analysis import SPECTRAL_BANDS, ALPHA_SPEC, CI_THRESHOLDS_SPEC, NORMALIZATION_BAND, LOG_RATIO_THRESHOLDS_SPEC
 import copy
 from analysis_functions_sva.snr_analysis_sva import calculate_statistics_log_snr, calculate_z_score_snr, symmetry_metrics_channel_z_score, symmetry_metrics_z_score, load_values_json, outlier_flag, find_outlier_details
-from analysis_functions_sva.vrms_analysis_sva import calculate_vrms, kde_modality, tail_fraction_and_trimmed_skew_two_sided, report_vrms_characteristics
+from analysis_functions_sva.vrms_analysis_sva import calculate_vrms, kde_modality, tail_fraction_and_trimmed_skew_two_sided, report_vrms_characteristics, get_rms_per_trigger_monitoring
 from config_files_sva.config_vrms import kde_modality_function_parameters, skewness_function_parameters, report_vrms_function_parameters
 from analysis_functions_sva.glitching_analysis_sva import binomtest_glitch_fraction
 from config_files_sva.config_glitching import config_glitching_values
-from analysis_functions_sva.block_offsets_analysis_sva import get_block_offsets_after_removal, get_block_offsets_before_removal, plot_block_offsets_violin_before_after_comparison, block_offset_statistics
+from analysis_functions_sva.block_offsets_analysis_sva_dataproviderrnog import get_block_offsets_after_removal, get_block_offsets_before_removal, plot_block_offsets_violin_before_after_comparison, block_offset_statistics
+from analysis_functions_sva.block_offsets_analysis_sva_monitoring import get_force_block_offsets_monitoring, block_offset_statistics_monitoring, plot_block_offsets_violin_monitoring
 from config_files_sva.config_block_offsets import block_offset_limits
 from plotting_functions_sva.plotting_sva_spectrum import plot_time_integrated_surface_spectra_unnormalized, plot_time_integrated_surface_spectra_normalized, plot_time_integrated_deep_spectra
 from plotting_functions_sva.plotting_sva_snr import choose_day_interval, plot_snr_against_time
@@ -432,25 +433,33 @@ def write_glitching_results(glitch_info, station_id, run_label):
         f.write("\n".join(lines))
     logger.info(f"Glitching analysis results written to {glitch_results_file}")
 
-def write_block_offset_results(block_offset_stats, station_id, run_label):
+def write_block_offset_results(block_offset_stats, station_id, run_label, use_monitoring=False):
     block_offset_results_file = os.path.join(RESULTS_DIR, f"block_offset_analysis_results_{station_id}_{run_label}.txt")
     with open(block_offset_results_file, "w") as f:
         for ch in sorted(block_offset_stats.keys()):
             stats = block_offset_stats[ch]
-            f.write(f"Channel {ch:02d}:\n")
-            f.write(f"  Before removal - mean: {stats['before_mean']} V, median: {stats['before_median']} V, std: {stats['before_std']} V, IQR: {stats['iqr_before']} V\n")
-            f.write(f"  After removal - mean: {stats['after_mean']} V, median: {stats['after_median']} V, std: {stats['after_std']} V, IQR: {stats['iqr_after']} V\n")
-            f.write(f"  Removal fraction (based on median): {stats['removal_fraction']*100:.1f}%\n")
-            f.write(f"  IQR reduction fraction: {stats['iqr_reduction_fraction']*100:.1f}%\n")
+            if use_monitoring:
+                f.write(f"Channel {ch:02d}:\n")
+                f.write(f"  Mean block offset: {stats['mean']}, median: {stats['median']}, std: {stats['std']}, IQR: {stats['iqr']}\n")
+                if stats["median"] > block_offset_limits["median"]:
+                    logger.warning(f"Channel {ch:02d} has a high median block offset of {stats['median']}, which may indicate a potential issue with the channel.")
+                elif stats["iqr"] > block_offset_limits["iqr"]:
+                    logger.warning(f"Channel {ch:02d} has a high IQR of block offsets ({stats['iqr']}), indicating significant variability that may need further investigation.")
+            else:
+                f.write(f"Channel {ch:02d}:\n")
+                f.write(f"  Before removal - mean: {stats['before_mean']} V, median: {stats['before_median']} V, std: {stats['before_std']} V, IQR: {stats['iqr_before']} V\n")
+                f.write(f"  After removal - mean: {stats['after_mean']} V, median: {stats['after_median']} V, std: {stats['after_std']} V, IQR: {stats['iqr_after']} V\n")
+                f.write(f"  Removal fraction (based on median): {stats['removal_fraction']*100:.1f}%\n")
+                f.write(f"  IQR reduction fraction: {stats['iqr_reduction_fraction']*100:.1f}%\n")
 
-            if stats["before_median"] > block_offset_limits["median"]:
-                logger.warning(f"Channel {ch:02d} has a high median block offset of {stats['before_median']} V before removal, which may indicate a potential issue with the channel.")
-            elif stats["iqr_before"] > block_offset_limits["iqr"]:
-                logger.warning(f"Channel {ch:02d} has a high IQR of block offsets ({stats['iqr_before']} V) before removal, indicating significant variability that may need further investigation.")
-            elif stats["after_median"] > block_offset_limits["median"]:
-                logger.warning(f"Channel {ch:02d} has a relatively high median block offset of {stats['after_median']} V after removal, removal was not fully effective.")
-            elif stats["iqr_after"] > block_offset_limits["iqr"]:
-                logger.warning(f"Channel {ch:02d} has a relatively high IQR of block offsets ({stats['iqr_after']} V) after removal, indicating that there may still be significant variability in block offsets.")
+                if stats["before_median"] > block_offset_limits["median"]:
+                    logger.warning(f"Channel {ch:02d} has a high median block offset of {stats['before_median']} V before removal, which may indicate a potential issue with the channel.")
+                elif stats["iqr_before"] > block_offset_limits["iqr"]:
+                    logger.warning(f"Channel {ch:02d} has a high IQR of block offsets ({stats['iqr_before']} V) before removal, indicating significant variability that may need further investigation.")
+                elif stats["after_median"] > block_offset_limits["median"]:
+                    logger.warning(f"Channel {ch:02d} has a relatively high median block offset of {stats['after_median']} V after removal, removal was not fully effective.")
+                elif stats["iqr_after"] > block_offset_limits["iqr"]:
+                    logger.warning(f"Channel {ch:02d} has a relatively high IQR of block offsets ({stats['iqr_after']} V) after removal, indicating that there may still be significant variability in block offsets.")
     logger.info(f"Block offset analysis results written to {block_offset_results_file}")
 
 if __name__ == "__main__":
@@ -573,22 +582,17 @@ if __name__ == "__main__":
 
         radiant1_mask = choose_trigger_type(event_info, "RADIANT1")
         spec_arr_radiant1 = spec_arr[:, radiant1_mask, :]  
+        run_event_counts = None # Not available when reading with dataProviderRNOG, only with monitoring data, used for spectral plotting
+        run_no_force = event_info["run"][force_mask]
+        event_number_force = event_info["eventNumber"][force_mask]
 
     elif use_monitoring == True:
         combined_event_info = read_multiple_runs(base_path = base_data_path, station_id = station_id, run_numbers=run_numbers)
+
+        #General info:
         run_no = combined_event_info["run_no"]
-        freqs = combined_event_info["freqs"]
-        rms_arr = combined_event_info["rms_arr"]
-        glitch_arr = combined_event_info["glitching_test_statistic_arr"]
-        block_offsets_arr = combined_event_info["block_offsets_arr"]
-        snr_arr = combined_event_info["snr_arr"]
         trigger_type_arr = combined_event_info["triggerType"]
         times = combined_event_info["trigger_time_utc"]
-        avg_spectrum = combined_event_info["avg_spectrum"]
-        spec_arr_force = combined_event_info["avg_spectrum_force"]
-        spec_arr_lt = combined_event_info["avg_spectrum_lt"]
-        spec_arr_radiant0 = combined_event_info["avg_spectrum_rf0"]
-        spec_arr_radiant1 = combined_event_info["avg_spectrum_rf1"]
         max_abs_amplitude_arr = combined_event_info["max_abs_amplitude_arr"]
         event_number_arr = combined_event_info["event_number_arr"]
         total_n_events = combined_event_info["total_n_events"]
@@ -596,9 +600,33 @@ if __name__ == "__main__":
         total_n_lt_triggers = combined_event_info["total_n_lt_triggers"]
         total_n_radiant0_triggers = combined_event_info["total_n_rf0_triggers"]
         total_n_radiant1_triggers = combined_event_info["total_n_rf1_triggers"]
+        run_event_counts = combined_event_info["run_event_counts"] # dict with run number as key and value as another dict with n_events, n_forced_triggers, n_lt_triggers, n_rf0_triggers, n_rf1_triggers for that run
+
+
+        # Spectral info:
+        freqs = combined_event_info["freqs"]
+        avg_spectrum = combined_event_info["avg_spectrum"]
+        spec_arr_force = combined_event_info["avg_spectrum_force"]
+        spec_arr_lt = combined_event_info["avg_spectrum_lt"]
+        spec_arr_radiant0 = combined_event_info["avg_spectrum_rf0"]
+        spec_arr_radiant1 = combined_event_info["avg_spectrum_rf1"]
+
+        # Glitching, SNR and block offset info:
+        rms_arr = combined_event_info["rms_arr"]
+        glitch_arr = combined_event_info["glitching_test_statistic_arr"]
+        block_offsets_arr = combined_event_info["block_offsets_arr"]
+        snr_arr = combined_event_info["snr_arr"] 
 
         norm_spec_arr_force, scale_factors_force = normalize_channels(spec_arr_force, freqs, downward_channels, upward_channels)
+        
+        # Masks for different trigger types
         force_mask = choose_trigger_type_header(trigger_type_arr, "FORCE")
+        lt_mask = choose_trigger_type_header(trigger_type_arr, "LT")
+        radiant0_mask = choose_trigger_type_header(trigger_type_arr, "RADIANT0")
+        radiant1_mask = choose_trigger_type_header(trigger_type_arr, "RADIANT1")
+
+        run_no_force = run_no[force_mask]
+        event_number_force = event_number_arr[force_mask]
     
     else:
         raise ValueError("Invalid method for reading data, should be either 'monitoring' or 'dataProviderRNOG'")
@@ -644,24 +672,23 @@ if __name__ == "__main__":
         write_spectral_results(ch, excess_info_results, station_id, run_label, log_once=(ch==surface_channels[-1]), reset_file=(ch==surface_channels[0]))    
 
     # Surface spectrum
-    plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_force, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label="force")
-    plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_lt, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label="lt")
-    plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_radiant0, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label="radiant0")
-    plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_radiant1, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label="radiant1")
+    plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_force, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label="force", use_monitoring = use_monitoring, run_event_counts = run_event_counts)
+    plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_lt, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label="lt", use_monitoring = use_monitoring, run_event_counts = run_event_counts)
+    plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_radiant0, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label="radiant0", use_monitoring = use_monitoring, run_event_counts = run_event_counts)
+    plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_radiant1, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label="radiant1", use_monitoring = use_monitoring, run_event_counts = run_event_counts)
     
     # Normalized surface spectrum - only force
-    plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr_force, freqs, upward_channels, downward_channels, save_location, run_label)
+    plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr_force, freqs, upward_channels, downward_channels, save_location, run_label, use_monitoring = use_monitoring, run_event_counts = run_event_counts)
 
     # Deep spectrum (unnormalized)
-    plot_time_integrated_deep_spectra(station_id, spec_arr_force, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label="force")
-    plot_time_integrated_deep_spectra(station_id, spec_arr_lt, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label="lt")
-    plot_time_integrated_deep_spectra(station_id, spec_arr_radiant0, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label="radiant0")
-    plot_time_integrated_deep_spectra(station_id, spec_arr_radiant1, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label="radiant1")
+    plot_time_integrated_deep_spectra(station_id, spec_arr_force, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label="force", use_monitoring = use_monitoring, run_event_counts = run_event_counts)
+    plot_time_integrated_deep_spectra(station_id, spec_arr_lt, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label="lt", use_monitoring = use_monitoring, run_event_counts = run_event_counts)
+    plot_time_integrated_deep_spectra(station_id, spec_arr_radiant0, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label="radiant0", use_monitoring = use_monitoring, run_event_counts = run_event_counts)
+    plot_time_integrated_deep_spectra(station_id, spec_arr_radiant1, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label="radiant1", use_monitoring = use_monitoring, run_event_counts = run_event_counts)
     
     ###### SNR analysis
     logger.info("Starting SNR analysis for FORCE trigger events...")
     snr_arr_force = snr_arr[:, force_mask]
-    event_info_force = {key: np.array(value)[force_mask] for key, value in event_info.items()}
     times = np.array(times)
     times_force = times[force_mask]
 
@@ -675,41 +702,49 @@ if __name__ == "__main__":
     k_values_log_snr = load_values_json(SCRIPT_DIR, k_values_filename_snr)
     flag_outliers_snr = outlier_flag(z_score_arr_log_snr, k_values_log_snr, all_channels)
 
-    outlier_details_snr = find_outlier_details(z_score_arr_log_snr, k_values_log_snr, flag_outliers_snr, event_info_force, all_channels)
+    outlier_details_snr = find_outlier_details(z_score_arr_log_snr, k_values_log_snr, flag_outliers_snr, all_channels, run_no_force, event_number_force)
     write_snr_outlier_details(outlier_details_snr, station_id, run_label)
 
     day_interval = choose_day_interval(times)
     plot_snr_against_time(station_id, times_force, snr_arr_force, flag_outliers_snr, z_score_arr_log_snr, k_values_log_snr, all_channels, save_location, run_label, nrows=12, ncols=2, day_interval=day_interval)
 
     ##### Vrms analysis
-    vrms_arr, vrms_arr_force, vrms_arr_radiant0, vrms_arr_radiant1, vrms_arr_lt = calculate_vrms(trace_arr, event_info)
+    if use_monitoring:
+        logger.info("Starting Vrms analysis for monitoring data...")
+        # Still named as Vrms for consistency but they are actually RMS values
+        vrms_arr,vrms_arr_force, vrms_arr_radiant0, vrms_arr_radiant1, vrms_arr_lt = get_rms_per_trigger_monitoring(rms_arr=rms_arr, force_mask=force_mask, lt_mask=lt_mask, radiant0_mask=radiant0_mask, radiant1_mask=radiant1_mask)
+    else:
+        logger.info("Starting Vrms analysis for data read with dataProviderRNOG...")
+        vrms_arr, vrms_arr_force, vrms_arr_radiant0, vrms_arr_radiant1, vrms_arr_lt = calculate_vrms(trace_arr, event_info)
+
     logger.info(f"Number of RADIANT0 trigger events: {len(vrms_arr_radiant0[1])}, Number of RADIANT1 trigger events: {len(vrms_arr_radiant1[1])}, Number of LT trigger events: {len(vrms_arr_lt[1])}")
     
-    logger.info(f"Calculating Vrms modality and tail characteristics for each trigger type...")
+    logger.info(f"Calculating RMS (for monitoring.root) or Vrms (for dataProviderRNOG) modality and tail characteristics for each trigger type...")
     modality_dict_force = kde_modality(vrms_arr_force, all_channels, kde_modality_config=kde_modality_function_parameters)
     tail_dict_force = tail_fraction_and_trimmed_skew_two_sided(vrms_arr_force, all_channels, skewness_config=skewness_function_parameters)
     if len(vrms_arr_force[1]) < 100:
-            logger.warning(f"FORCE trigger has less than 100 valid Vrms entries ({len(vrms_arr_force)}). Results for the Vrms statistics may be unreliable.")
+        logger.warning(f"FORCE trigger has less than 100 valid RMS (for monitoring.root) or Vrms (for dataProviderRNOG) entries ({len(vrms_arr_force[1])}). Results for the Vrms statistics may be unreliable.")
     modality_force, tail_label_force = report_vrms_characteristics(modality_dict_force, tail_dict_force, all_channels, report_config=report_vrms_function_parameters)
 
     modality_dict_radiant0 = kde_modality(vrms_arr_radiant0, all_channels, kde_modality_config=kde_modality_function_parameters)
     tail_dict_radiant0 = tail_fraction_and_trimmed_skew_two_sided(vrms_arr_radiant0, all_channels, skewness_config=skewness_function_parameters)
     if len(vrms_arr_radiant0[1]) < 100:
-            logger.warning(f"RADIANT0 trigger has less than 100 valid Vrms entries ({len(vrms_arr_radiant0)}). Results for the Vrms statistics may be unreliable.")
+        logger.warning(f"RADIANT0 trigger has less than 100 valid RMS (for monitoring.root) or Vrms (for dataProviderRNOG) entries ({len(vrms_arr_radiant0[1])}). Results for the Vrms statistics may be unreliable.")
     modality_radiant0, tail_label_radiant0 = report_vrms_characteristics(modality_dict_radiant0, tail_dict_radiant0, all_channels, report_config=report_vrms_function_parameters)
 
     modality_dict_radiant1 = kde_modality(vrms_arr_radiant1, all_channels, kde_modality_config=kde_modality_function_parameters)
     tail_dict_radiant1 = tail_fraction_and_trimmed_skew_two_sided(vrms_arr_radiant1, all_channels, skewness_config=skewness_function_parameters)
     if len(vrms_arr_radiant1[1]) < 100:
-            logger.warning(f"RADIANT1 trigger has less than 100 valid Vrms entries ({len(vrms_arr_radiant1)}). Results for the Vrms statistics may be unreliable.")
+        logger.warning(f"RADIANT1 trigger has less than 100 valid RMS (for monitoring.root) or Vrms (for dataProviderRNOG) entries ({len(vrms_arr_radiant1[1])}). Results for the Vrms statistics may be unreliable.")
     modality_radiant1, tail_label_radiant1 = report_vrms_characteristics(modality_dict_radiant1, tail_dict_radiant1, all_channels, report_config=report_vrms_function_parameters)
 
     modality_dict_lt = kde_modality(vrms_arr_lt, all_channels, kde_modality_config=kde_modality_function_parameters)
     tail_dict_lt = tail_fraction_and_trimmed_skew_two_sided(vrms_arr_lt, all_channels, skewness_config=skewness_function_parameters)
     if len(vrms_arr_lt[1]) < 100:
-            logger.warning(f"LT trigger has less than 100 valid Vrms entries ({len(vrms_arr_lt)}). Results for the Vrms statistics may be unreliable.")
+        logger.warning(f"LT trigger has less than 100 valid RMS (for monitoring.root) or Vrms (for dataProviderRNOG) entries ({len(vrms_arr_lt[1])}). Results for the Vrms statistics may be unreliable.")
+    
     modality_lt, tail_label_lt = report_vrms_characteristics(modality_dict_lt, tail_dict_lt, all_channels, report_config=report_vrms_function_parameters)
-    plot_vrms_values_against_time(event_info, times, vrms_arr, all_channels, station_id, run_label, save_location, n_rows=12, n_cols=2, day_interval=day_interval)
+    plot_vrms_values_against_time(times, vrms_arr, all_channels, station_id, run_label, save_location, force_mask, radiant0_mask, radiant1_mask, lt_mask, n_rows=12, n_cols=2, day_interval=day_interval, use_monitoring=use_monitoring)
 
     # Write detailed Vrms modality results to text files for each trigger type
     write_vrms_modality_results(modality_force, tail_label_force, trigger_label="FORCE", station_id=station_id, run_label=run_label)
@@ -717,14 +752,13 @@ if __name__ == "__main__":
     write_vrms_modality_results(modality_radiant1, tail_label_radiant1, trigger_label="RADIANT1", station_id=station_id, run_label=run_label)
     write_vrms_modality_results(modality_lt, tail_label_lt, trigger_label="LT", station_id=station_id, run_label=run_label)
 
-
     # The Vrms statistics can be misleading (especially for low event number) so the debugging plots are always generated
-    debug_plot_vrms_distribution(vrms_arr_force, modality_dict_force, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="FORCE", save_location=save_location, n_rows=12, n_cols=2)
-    debug_plot_vrms_distribution(vrms_arr_radiant0, modality_dict_radiant0, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="RADIANT0", save_location=save_location, n_rows=12, n_cols=2)
-    debug_plot_vrms_distribution(vrms_arr_radiant1, modality_dict_radiant1, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="RADIANT1", save_location=save_location, n_rows=12, n_cols=2)
-    debug_plot_vrms_distribution(vrms_arr_lt, modality_dict_lt, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="LT", save_location=save_location, n_rows=12, n_cols=2)
+    debug_plot_vrms_distribution(vrms_arr_force, modality_dict_force, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="FORCE", save_location=save_location, n_rows=12, n_cols=2, use_monitoring=use_monitoring)
+    debug_plot_vrms_distribution(vrms_arr_radiant0, modality_dict_radiant0, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="RADIANT0", save_location=save_location, n_rows=12, n_cols=2, use_monitoring=use_monitoring)
+    debug_plot_vrms_distribution(vrms_arr_radiant1, modality_dict_radiant1, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="RADIANT1", save_location=save_location, n_rows=12, n_cols=2, use_monitoring=use_monitoring)
+    debug_plot_vrms_distribution(vrms_arr_lt, modality_dict_lt, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="LT", save_location=save_location, n_rows=12, n_cols=2, use_monitoring=use_monitoring)
     
-    ##### Glitching analysis
+    ##### Glitching analysis - Same for both monitoring and dataProviderRNOG 
     logger.info("Starting glitching analysis...")
     config_glitching = copy.deepcopy(config_glitching_values)
     glitch_info = binomtest_glitch_fraction(glitch_arr, all_channels, config_glitching=config_glitching)
@@ -733,17 +767,26 @@ if __name__ == "__main__":
     glitching_violin_plot(glitch_arr, all_channels, station_id, run_label, save_location)
     plot_glitch_q99_over_time(np.array(times), glitch_arr, all_channels, station_id, run_label, save_location)
 
-    # Trigger rate with thresholds plot
-    fig_trigger, ax_rate, ax_thr = plot_trigger_rate_with_thresholds(station_id, event_info, downward_channels, upward_channels, run_label, day_interval, bin_width_initial=300, max_bins=800, save_location=save_location)
+    # Trigger rate with thresholds plot - Need to be fixed!!!!
+    ####fig_trigger, ax_rate, ax_thr = plot_trigger_rate_with_thresholds(station_id, event_info, downward_channels, upward_channels, run_label, day_interval, bin_width_initial=300, max_bins=800, save_location=save_location)
     
-    ##### Block offsets
-    logger.info("Starting block offset analysis, results are not used to determine channel health, see warnings in the log file for channels with potential block offset issues. The block offsets are then removed.")
-    fit_block_offsets_before = get_block_offsets_before_removal(block_offsets_arr, event_info, all_channels)
-    fit_block_offsets_after = get_block_offsets_after_removal(trace_arr, event_info, all_channels, sampling_rate=sr)
+    ##### Block offsets - dataProviderRNOG
+    if use_monitoring:
+        logger.info("Starting block offset analysis (monitoring.root), results are not used to determine channel health, see warnings in the log file for channels with potential block offset issues. The block offsets are then removed.")
+        block_offset_arr_force = get_force_block_offsets_monitoring(block_offsets_arr, force_mask)
+        block_offset_stats = block_offset_statistics_monitoring(block_offset_arr_force=block_offset_arr_force, channel_list=all_channels)
+        
+        write_block_offset_results(block_offset_stats, station_id, run_label, use_monitoring=use_monitoring)
+        plot_block_offsets_violin_monitoring(block_offset_arr_force, all_channels, station_id, run_label, save_location)
+    
+    else:
+        logger.info("Starting block offset analysis (dataProviderRNOG), results are not used to determine channel health, see warnings in the log file for channels with potential block offset issues. The block offsets are then removed.")
+        fit_block_offsets_before = get_block_offsets_before_removal(block_offsets_arr, event_info, all_channels)
+        fit_block_offsets_after = get_block_offsets_after_removal(trace_arr, event_info, all_channels, sampling_rate=sr)
 
-    block_offset_stats = block_offset_statistics(fit_block_offsets_before, fit_block_offsets_after, all_channels)
-    write_block_offset_results(block_offset_stats, station_id, run_label)
-    plot_block_offsets_violin_before_after_comparison(fit_block_offsets_before, fit_block_offsets_after, all_channels, station_id, run_label, save_location)
+        block_offset_stats = block_offset_statistics(fit_block_offsets_before, fit_block_offsets_after, all_channels)
+        write_block_offset_results(block_offset_stats, station_id, run_label, use_monitoring=use_monitoring)
+        plot_block_offsets_violin_before_after_comparison(fit_block_offsets_before, fit_block_offsets_after, all_channels, station_id, run_label, save_location)
 
     # Debug plots
     if args.debug_plot:   
@@ -751,7 +794,6 @@ if __name__ == "__main__":
         debug_plot_snr_distribution(log_snr_arr, channel_list=all_channels, save_location=save_location, station_id=station_id, run_label=run_label, bins=30)
         debug_plot_z_score_snr(z_score_arr_log_snr, channel_list=all_channels, save_location=save_location, station_id=station_id, run_label=run_label, bins=30)   
         
-
     # Create summary CSV file
     n_events_force = spec_arr_force.shape[1]
     create_result_csv_file(
