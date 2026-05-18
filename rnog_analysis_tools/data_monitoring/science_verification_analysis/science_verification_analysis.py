@@ -8,34 +8,36 @@ import os
 import datetime
 import numpy as np
 from matplotlib import pyplot as plt
-from NuRadioReco.utilities import units
 from argparse import ArgumentParser
 import pandas as pd
-from matplotlib.lines import Line2D
-from matplotlib.patches import Patch
 import matplotlib.dates as mdates
 from datetime import timezone
-from matplotlib import colors, cm
+import copy
+
+# Import config files
 from config_files_sva.config_station import get_station_config, sampling_rate
 from config_files_sva.config_plotting import set_plot_style
-from read_rnog_data_nuradio import convert_events_information, read_rnog_data
-from analysis_functions_sva.spectral_analysis_sva import find_amplitude_ratio_in_band, find_amplitude_ratio_in_band_specific_bkg, excess_info_from_ratio, excess_info_from_ratio_specific_bkg, validate_excess_in_bands
 from config_files_sva.config_spectral_analysis import SPECTRAL_BANDS, ALPHA_SPEC, CI_THRESHOLDS_SPEC, NORMALIZATION_BAND, LOG_RATIO_THRESHOLDS_SPEC
-import copy
-from analysis_functions_sva.snr_analysis_sva import calculate_statistics_log_snr, calculate_z_score_snr, symmetry_metrics_channel_z_score, symmetry_metrics_z_score, load_values_json, outlier_flag, find_outlier_details
-from analysis_functions_sva.vrms_analysis_sva import calculate_vrms, kde_modality, tail_fraction_and_trimmed_skew_two_sided, report_vrms_characteristics, get_rms_per_trigger_monitoring
 from config_files_sva.config_vrms import kde_modality_function_parameters, skewness_function_parameters, report_vrms_function_parameters
-from analysis_functions_sva.glitching_analysis_sva import binomtest_glitch_fraction
 from config_files_sva.config_glitching import config_glitching_values
+from config_files_sva.config_block_offsets import block_offset_limits
+
+# Import analysis functions
+from read_rnog_data_nuradio import convert_events_information, read_rnog_data
+from monitoring_data_functions_sva.get_monitoring_data_uproot import choose_trigger_type_header, read_multiple_runs
+from analysis_functions_sva.spectral_analysis_sva import find_amplitude_ratio_in_band, find_amplitude_ratio_in_band_specific_bkg, excess_info_from_ratio, excess_info_from_ratio_specific_bkg, validate_excess_in_bands
+from analysis_functions_sva.z_score_analysis_sva import calculate_statistics_log_paramater, calculate_z_score_parameter, symmetry_metrics_channel_z_score, symmetry_metrics_z_score, load_values_json, outlier_flag, find_outlier_details
+from analysis_functions_sva.vrms_analysis_sva import calculate_vrms, kde_modality, tail_fraction_and_trimmed_skew_two_sided, report_vrms_characteristics, get_rms_per_trigger_monitoring
+from analysis_functions_sva.glitching_analysis_sva import binomtest_glitch_fraction
 from analysis_functions_sva.block_offsets_analysis_sva_dataproviderrnog import get_block_offsets_after_removal, get_block_offsets_before_removal, plot_block_offsets_violin_before_after_comparison, block_offset_statistics
 from analysis_functions_sva.block_offsets_analysis_sva_monitoring import get_force_block_offsets_monitoring, block_offset_statistics_monitoring, plot_block_offsets_violin_monitoring
-from config_files_sva.config_block_offsets import block_offset_limits
+
+# Import plotting functions
 from plotting_functions_sva.plotting_sva_spectrum import plot_time_integrated_surface_spectra_unnormalized, plot_time_integrated_surface_spectra_normalized, plot_time_integrated_deep_spectra
 from plotting_functions_sva.plotting_sva_snr import choose_day_interval, plot_snr_against_time
 from plotting_functions_sva.plotting_sva_vrms import plot_vrms_values_against_time
 from plotting_functions_sva.plotting_sva_glitch import glitching_violin_plot, choose_bin_size, plot_glitch_q99_over_time
 from plotting_functions_sva.plotting_sva_debug import debug_plot_ratios, debug_plot_snr_distribution, debug_plot_z_score_snr, debug_plot_vrms_distribution
-from monitoring_data_functions_sva.get_monitoring_data_uproot import choose_trigger_type_header, read_multiple_runs
 
 #### Script directory for json files
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -45,6 +47,7 @@ PLOTS_DIR = os.path.join(SCRIPT_DIR, "plots")
 RESULTS_DIR = os.path.join(SCRIPT_DIR, "detailed_results")
 CSV_DIR = os.path.join(SCRIPT_DIR, "channel_health_summary")
 LOGS_DIR = os.path.join(SCRIPT_DIR, "logs")
+REFERENCE_DIR = os.path.join(SCRIPT_DIR, "expected_values")
 
 # Create output directories if they don't exist
 os.makedirs(RESULTS_DIR, exist_ok=True)
@@ -71,7 +74,7 @@ def setup_logging(station_id, run_label):
 
     logger.info(f"Logging to {log_file}")
 
-#### Choose events based on trigger type
+#### Choose events based on trigger type for dataProviderRNOG case
 def choose_trigger_type(event_info, trigger_type: str):
     '''Choose events based on trigger type.'''
     mask = event_info["triggerType"] == trigger_type
@@ -103,6 +106,7 @@ def normalize_channels(spec_arr, frequencies, down_channels, up_channels):
 
     return spec_arr, scale_factors
 
+#### Runtable query to get run numbers for a given station and time range
 def read_rnog_runtable(station_id: int, start_time: str, stop_time: str):
     '''Get run numbers from the runtable tool for a given station and time range.'''
     RunTable = rt.RunTable()
@@ -388,8 +392,8 @@ def write_spectral_results(ch, excess_info_results, station_id, run_label, log_o
         logger.info(f"Spectral analysis results written to {spectral_results_file}")
 
     
-def write_snr_outlier_details(outlier_details, station_id, run_label):
-    outlier_results_file = os.path.join(RESULTS_DIR, f"snr_details_{station_id}_{run_label}.txt")
+def write_snr_outlier_details(outlier_details, station_id, run_label, results_dir =  RESULTS_DIR):
+    outlier_results_file = os.path.join(results_dir, f"snr_details_{station_id}_{run_label}.txt")
     with open(outlier_results_file, "w") as f:
         for ch in sorted(outlier_details.keys()):
             entries = outlier_details[ch]
@@ -406,6 +410,25 @@ def write_snr_outlier_details(outlier_details, station_id, run_label):
                 f.write(f"  - run {e['run']}, event {e['eventNumber']}, |z| = {e['z_abs']:.2f} (delta = {e['z_minus_k']:.2f} above k)\n")
             
     logger.info(f"SNR outlier details written to {outlier_results_file}")
+
+def write_vrms_outlier_details(outlier_details, station_id, run_label, trigger_label, results_dir =  RESULTS_DIR):
+    outlier_results_file = os.path.join(results_dir, f"vrms_details_{station_id}_{run_label}_{trigger_label}.txt")
+    with open(outlier_results_file, "w") as f:
+        for ch in sorted(outlier_details.keys()):
+            entries = outlier_details[ch]
+            n_outliers = len(entries)
+
+            if n_outliers == 0:
+                f.write(f"\nChannel {ch:02d}:\n 0 outliers\n")
+                continue
+
+            k_ch = entries[0]["k"]
+            f.write(f"\nChannel {ch:02d}:\n {n_outliers} outliers (k = {k_ch:.2f})\n")
+            
+            for e in entries:
+                f.write(f"  - run {e['run']}, event {e['eventNumber']}, |z| = {e['z_abs']:.2f} (delta = {e['z_minus_k']:.2f} above k)\n")
+            
+    logger.info(f"Vrms outlier details written to {outlier_results_file}")
 
 def write_vrms_modality_results(modality, tail_label, trigger_label, station_id, run_label):
     modality_results_file = os.path.join(RESULTS_DIR, f"vrms_modality_{station_id}_{run_label}_{trigger_label}.txt")
@@ -692,18 +715,14 @@ if __name__ == "__main__":
     times = np.array(times)
     times_force = times[force_mask]
 
-    log_snr_arr, log_mean_list, log_median_list, log_std_list, log_difference_list = calculate_statistics_log_snr(snr_arr_force)
-    ref_log_mean_filename = f"expected_values/station_{station_id}_ref_log_mean_snr.json"
-    ref_log_std_filename = f"expected_values/station_{station_id}_ref_log_std_snr.json"
-    ref_log_mean_list = load_values_json(SCRIPT_DIR, ref_log_mean_filename)
-    ref_log_std_list = load_values_json(SCRIPT_DIR, ref_log_std_filename)
-    z_score_arr_log_snr = calculate_z_score_snr(log_snr_arr, ref_log_mean_list, ref_log_std_list, all_channels)
-    k_values_filename_snr = f"expected_values/station_{station_id}_k_ref_values_snr.json"
-    k_values_log_snr = load_values_json(SCRIPT_DIR, k_values_filename_snr)
+    log_snr_arr, log_mean_list, log_median_list, log_std_list, log_difference_list = calculate_statistics_log_paramater(snr_arr_force)
+    reference_filename = f"expected_snr/expected_snr_values_station{station_id}.json"
+    k_values_log_snr, ref_log_mean_list, ref_log_std_list = load_values_json(REFERENCE_DIR, reference_filename)
+    z_score_arr_log_snr = calculate_z_score_parameter(log_snr_arr, ref_log_mean_list, ref_log_std_list, all_channels)
     flag_outliers_snr = outlier_flag(z_score_arr_log_snr, k_values_log_snr, all_channels)
 
     outlier_details_snr = find_outlier_details(z_score_arr_log_snr, k_values_log_snr, flag_outliers_snr, all_channels, run_no_force, event_number_force)
-    write_snr_outlier_details(outlier_details_snr, station_id, run_label)
+    write_snr_outlier_details(outlier_details_snr, station_id, run_label, results_dir=RESULTS_DIR)
 
     day_interval = choose_day_interval(times)
     plot_snr_against_time(station_id, times_force, snr_arr_force, flag_outliers_snr, z_score_arr_log_snr, k_values_log_snr, all_channels, save_location, run_label, nrows=12, ncols=2, day_interval=day_interval)

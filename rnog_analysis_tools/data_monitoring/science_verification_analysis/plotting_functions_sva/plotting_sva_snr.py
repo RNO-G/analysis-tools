@@ -45,10 +45,10 @@ def plot_snr_against_time(station_id,times,snr_arr,flag,z_log,k_list,channels,sa
         c = idx%ncols
         ax = axs[r,c]
         good_mask = ~flag[ch]
-        ax.scatter(times[good_mask], np.log10(snr_arr[ch][good_mask]), s=8,alpha=0.25, color="gray")
+        ax.scatter(times[good_mask], np.log10(snr_arr[ch][good_mask]), s=8,alpha=0.25, color="gray", rasterized=True)
         zex = np.abs(z_log[ch]) - k_list[ch]
         zex = np.clip(zex,0,None)
-        sc = ax.scatter(times[flag[ch]], np.log10(snr_arr[ch][flag[ch]]), s=8,c=zex[flag[ch]], cmap="Reds")
+        sc = ax.scatter(times[flag[ch]], np.log10(snr_arr[ch][flag[ch]]), s=8,c=zex[flag[ch]], cmap="Reds", rasterized=True)
         cax = ax.inset_axes([1.02,0.1,0.05,0.8])
         plt.colorbar(sc,cax=cax)
         ax.grid(alpha=0.4)
