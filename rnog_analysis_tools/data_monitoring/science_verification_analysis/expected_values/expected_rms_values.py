@@ -11,15 +11,14 @@ SCRIPT_DIR_REF = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.dirname(SCRIPT_DIR_REF)
 sys.path.insert(0, PARENT_DIR)
 
-from analysis_functions_sva.z_score_analysis_sva import calculate_statistics_log_paramater, calculate_z_score_parameter, symmetry_metrics_channel_z_score, symmetry_metrics_z_score, find_k_value, save_values_json, load_values_json, outlier_flag, find_outlier_details
-from plotting_functions_sva.plotting_sva_vrms import plot_vrms_values_against_time_per_trigger
+logger = logging.getLogger(__name__)
+
+from analysis_functions_sva.z_score_analysis_sva import calculate_z_score_parameter, find_k_value, save_values_json, outlier_flag, find_outlier_details
+from plotting_functions_sva.plotting_sva_vrms import plot_vrms_values_against_time_single_trigger_zscore
 from config_files_sva.config_station import get_station_config, sampling_rate
 import science_verification_analysis as sva
 from monitoring_data_functions_sva.get_monitoring_data_uproot import read_multiple_runs, choose_trigger_type_header
 from analysis_functions_sva.vrms_analysis_sva import get_rms_per_trigger_monitoring, calculate_vrms
-
-
-logger = logging.getLogger(__name__)
 
 def setup_logging(station_id, run_label):
 
@@ -198,6 +197,11 @@ if __name__ == "__main__":
         radiant0_mask = choose_trigger_type_header(trigger_type_arr, "RADIANT0")
         radiant1_mask = choose_trigger_type_header(trigger_type_arr, "RADIANT1")
 
+        failed_run_info = combined_event_info["failed_run_info"] # dict with run number as key and value as reason for failure, only for runs that failed to be read
+
+        if failed_run_info:
+            sva.write_failed_runs_to_csv(station_id, failed_run_info, run_label, results_dir=RESULTS_DIR_REF)
+
         run_no_force = run_no[force_mask]
         event_number_force = event_number_arr[force_mask]
 
@@ -229,8 +233,7 @@ if __name__ == "__main__":
         save_values_json(k_values_radiant0, vrms_mean_radiant0, vrms_std_radiant0, filename=f"expected_{parameter_label}_radiant0_station{station_id}.json", SCRIPT_DIR=EXPECTED_VALUES_DIR_REF, metadata=metadata_radiant0)
         save_values_json(k_values_radiant1, vrms_mean_radiant1, vrms_std_radiant1, filename=f"expected_{parameter_label}_radiant1_station{station_id}.json", SCRIPT_DIR=EXPECTED_VALUES_DIR_REF, metadata=metadata_radiant1)
         save_values_json(k_values_lt, vrms_mean_lt, vrms_std_lt, filename=f"expected_{parameter_label}_lt_station{station_id}.json", SCRIPT_DIR=EXPECTED_VALUES_DIR_REF, metadata=metadata_lt)
-
-    
+ 
     flag_outliers_force, outlier_details_force = outlier_details(z_score_force, k_values_force, all_channels, run_no_force, event_number_force)
     flag_outliers_radiant0, outlier_details_radiant0 = outlier_details(z_score_radiant0, k_values_radiant0, all_channels, run_no_radiant0, event_number_radiant0)
     flag_outliers_radiant1, outlier_details_radiant1 = outlier_details(z_score_radiant1, k_values_radiant1, all_channels, run_no_radiant1, event_number_radiant1)
@@ -241,5 +244,7 @@ if __name__ == "__main__":
     sva.write_vrms_outlier_details(outlier_details_radiant1, station_id, run_label, trigger_label="RADIANT1", results_dir=RESULTS_DIR_REF)  
     sva.write_vrms_outlier_details(outlier_details_lt, station_id, run_label, trigger_label="LT", results_dir=RESULTS_DIR_REF)
 
-    plot_vrms_values_against_time_per_trigger(times, vrms_arr, all_channels, station_id, run_label, PLOTS_DIR_REF, force_mask, radiant0_mask, radiant1_mask, lt_mask, use_monitoring=use_monitoring)
-    
+    plot_vrms_values_against_time_single_trigger_zscore(times_force, vrms_arr_force, flag_outliers_force, z_score_force, k_values_force, trigger_name="FORCE", channel_list=all_channels, station_id=station_id, run_label=run_label, save_location=PLOTS_DIR_REF)
+    plot_vrms_values_against_time_single_trigger_zscore(times_radiant0, vrms_arr_radiant0, flag_outliers_radiant0, z_score_radiant0, k_values_radiant0, trigger_name="RADIANT0", channel_list=all_channels, station_id=station_id, run_label=run_label, save_location=PLOTS_DIR_REF)
+    plot_vrms_values_against_time_single_trigger_zscore(times_radiant1, vrms_arr_radiant1, flag_outliers_radiant1, z_score_radiant1, k_values_radiant1, trigger_name="RADIANT1", channel_list=all_channels, station_id=station_id, run_label=run_label, save_location=PLOTS_DIR_REF)
+    plot_vrms_values_against_time_single_trigger_zscore(times_lt, vrms_arr_lt, flag_outliers_lt, z_score_lt, k_values_lt, trigger_name="LT", channel_list=all_channels, station_id=station_id, run_label=run_label, save_location=PLOTS_DIR_REF)

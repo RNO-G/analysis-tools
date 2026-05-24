@@ -19,66 +19,85 @@ def open_file(path):
     return uproot.open(path)
 
 def get_event_info_from_monitoring_file(file):
-    event_tree = file["events"]
-    EventSummary = event_tree["EventSummary"]
-    event_number_arr = stack_if_object(EventSummary["event_number"])
-    rms_arr = stack_if_object(EventSummary["rms"])
-    max_abs_amplitude_arr = stack_if_object(EventSummary["max_abs_amplitude"])
-    glitching_ts_arr = stack_if_object(EventSummary["glitching_test_statitic"]) # There is typo in the monitoring.root for glitch ts
-    block_offsets_arr = stack_if_object(EventSummary["block_offset"])
+    try:
+        event_tree = file["events"]
+        EventSummary = event_tree["EventSummary"]
+        event_number_arr = stack_if_object(EventSummary["event_number"])
+        rms_arr = stack_if_object(EventSummary["rms"])
+        max_abs_amplitude_arr = stack_if_object(EventSummary["max_abs_amplitude"])
+        glitching_ts_arr = stack_if_object(EventSummary["glitching_test_statitic"]) # There is typo in the monitoring.root for glitch ts
+        block_offsets_arr = stack_if_object(EventSummary["block_offset"])
 
-    return {
-        "event_number_arr": event_number_arr, # (n_events,)
-        "rms_arr": rms_arr.T, # (n_ch, n_events)
-        "max_abs_amplitude_arr": max_abs_amplitude_arr.T, # (n_ch, n_events)
-        "glitching_test_statistic_arr": glitching_ts_arr.T, # (n_ch, n_events)
-        "block_offsets_arr": block_offsets_arr.T # (n_ch, n_events)
-    }
+        return {
+            "event_number_arr": event_number_arr, # (n_events,)
+            "rms_arr": rms_arr.T, # (n_ch, n_events)
+            "max_abs_amplitude_arr": max_abs_amplitude_arr.T, # (n_ch, n_events)
+            "glitching_test_statistic_arr": glitching_ts_arr.T, # (n_ch, n_events)
+            "block_offsets_arr": block_offsets_arr.T # (n_ch, n_events)
+        }
+    
+    except KeyError as e:
+        logger.error(f"Key {e} not found in events tree of monitoring file. Please check the structure of the monitoring file.")
+        return None
 
 def get_run_summary_from_monitoring_file(file):
-    run_summary = file["RunSummary"]
-    run_summary_members = run_summary.members
-    return run_summary_members # is already a dict with member names as keys and arrays as values
+    try:
+        run_summary = file["RunSummary"]
+        run_summary_members = run_summary.members
+        return run_summary_members # is already a dict with member names as keys and arrays as values
+
+    except KeyError as e:
+        logger.error(f"Key {e} not found in run summary of monitoring file. Please check the structure of the monitoring file.")
+        return None
 
 def get_info_from_header_file(header_file):
-    header = header_file["header"]
-    trigger_time = stack_if_object(header["trigger_time"])
-    trigger_time_utc = trigger_time.astype("datetime64[s]")
-    run_no = stack_if_object(header["run_number"])
-    event_number = stack_if_object(header["event_number"])
-    station_id = stack_if_object(header["station_number"])
+    try:
+        header = header_file["header"]
+        trigger_time = stack_if_object(header["trigger_time"])
+        trigger_time_utc = trigger_time.astype("datetime64[s]")
+        run_no = stack_if_object(header["run_number"])
+        event_number = stack_if_object(header["event_number"])
+        station_id = stack_if_object(header["station_number"])
+        
+        trigger_info = header["trigger_info"]
+        force_trigger = stack_if_object(trigger_info["trigger_info.force_trigger"])
+        radiant_trigger = stack_if_object(trigger_info["trigger_info.radiant_trigger"])
+        lt_trigger = stack_if_object(trigger_info["trigger_info.lt_trigger"])
+        which_radiant = stack_if_object(trigger_info["trigger_info.which_radiant_trigger"])
+
+        # If there are overlaps return None
+        overlap_mask = (force_trigger.astype(bool) & radiant_trigger.astype(bool)) | (force_trigger.astype(bool) & lt_trigger.astype(bool)) | (radiant_trigger.astype(bool) & lt_trigger.astype(bool))
+        if np.any(overlap_mask):
+            n_overlap = np.sum(overlap_mask)
+            overlap_event_indices = np.where(overlap_mask)[0]
+            force_radiant_overlap = np.where(force_trigger.astype(bool) & radiant_trigger.astype(bool))[0]
+            force_lt_overlap = np.where(force_trigger.astype(bool) & lt_trigger.astype(bool))[0]
+            radiant_lt_overlap = np.where(radiant_trigger.astype(bool) & lt_trigger.astype(bool))[0]
+            logger.error(f"Found {n_overlap} events with overlapping trigger types at indices: {overlap_event_indices} for run {run_no[0]}. FORCE-RADIANT: {force_radiant_overlap}, FORCE-LT: {force_lt_overlap}, RADIANT-LT: {radiant_lt_overlap}. Please check the trigger info in the header file.")
+            return None
+        
+        return {
+            "trigger_time_utc": trigger_time_utc,
+            "run_no": run_no,
+            "event_number": event_number,
+            "station_id": station_id,
+            "force_trigger": force_trigger,
+            "radiant_trigger": radiant_trigger,
+            "lt_trigger": lt_trigger,
+            "which_radiant": which_radiant
+        }
     
-    trigger_info = header["trigger_info"]
-    force_trigger = stack_if_object(trigger_info["trigger_info.force_trigger"])
-    radiant_trigger = stack_if_object(trigger_info["trigger_info.radiant_trigger"])
-    lt_trigger = stack_if_object(trigger_info["trigger_info.lt_trigger"])
-    which_radiant = stack_if_object(trigger_info["trigger_info.which_radiant_trigger"])
-
-    # If there are overlaps raise error
-    overlap_mask = (force_trigger.astype(bool) & radiant_trigger.astype(bool)) | (force_trigger.astype(bool) & lt_trigger.astype(bool)) | (radiant_trigger.astype(bool) & lt_trigger.astype(bool))
-    if np.any(overlap_mask):
-        n_overlap = np.sum(overlap_mask)
-        logger.error(f"Found {n_overlap} events with overlapping trigger types. Please check the trigger info in the header file.")
-        raise ValueError(f"Found {n_overlap} events with overlapping trigger types. Please check the trigger info in the header file.")
-
-    return {
-        "trigger_time_utc": trigger_time_utc,
-        "run_no": run_no,
-        "event_number": event_number,
-        "station_id": station_id,
-        "force_trigger": force_trigger,
-        "radiant_trigger": radiant_trigger,
-        "lt_trigger": lt_trigger,
-        "which_radiant": which_radiant
-    }
+    except KeyError as e:
+        logger.error(f"Key {e} not found in header file. Please check the structure of the header file.")
+        return None
 
 def assign_trigger_types(force_trigger, radiant_trigger, lt_trigger, which_trigger, default="UNKNOWN"):
     if len(force_trigger) != len(radiant_trigger) or len(force_trigger) != len(lt_trigger) or len(force_trigger) != len(which_trigger):
         logger.error("Trigger arrays must have the same length.")
-        raise ValueError("Trigger arrays must have the same length.")
+        return None
 
     n_events = len(force_trigger)
-    trigger_type_arr = np.full(n_events, default, dtype=object)
+    trigger_type_arr = np.full(n_events, default, dtype='<U10') 
 
     trigger_type_arr[force_trigger] = "FORCE"
     trigger_type_arr[lt_trigger] = "LT"
@@ -94,22 +113,22 @@ def assign_trigger_types(force_trigger, radiant_trigger, lt_trigger, which_trigg
     if np.any(overlap_mask):
         overlap_idx = np.where(overlap_mask)[0]
         logger.error(f"Found {len(overlap_idx)} events with overlapping trigger types at indices {overlap_idx}. Please check the trigger info.")
-        raise ValueError(f"Found {len(overlap_idx)} events with overlapping trigger types at indices {overlap_idx}. Please check the trigger info.")
+        return None
     
     wrong_force = np.where(force_trigger & (trigger_type_arr != "FORCE"))[0]
     if len(wrong_force) > 0:
         logger.error(f"Found {len(wrong_force)} events where force_trigger is True but trigger type is not assigned as FORCE at indices {wrong_force}. Please check the trigger info.")
-        raise ValueError(f"Found {len(wrong_force)} events where force_trigger is True but trigger type is not assigned as FORCE at indices {wrong_force}. Please check the trigger info.")
+        return None
     
     wrong_lt = np.where(lt_trigger & (trigger_type_arr != "LT"))[0]
     if len(wrong_lt) > 0:
         logger.error(f"Found {len(wrong_lt)} events where lt_trigger is True but trigger type is not assigned as LT at indices {wrong_lt}. Please check the trigger info.")
-        raise ValueError(f"Found {len(wrong_lt)} events where lt_trigger is True but trigger type is not assigned as LT at indices {wrong_lt}. Please check the trigger info.")
+        return None
     
     wrong_radiant = np.where(radiant_trigger & ~np.isin(trigger_type_arr, ["RADIANT0", "RADIANT1", "RADIANTX"]))[0]
     if len(wrong_radiant) > 0:
         logger.error(f"Found {len(wrong_radiant)} events where radiant_trigger is True but trigger type is not assigned as RADIANT at indices {wrong_radiant}. Please check the trigger info.")
-        raise ValueError(f"Found {len(wrong_radiant)} events where radiant_trigger is True but trigger type is not assigned as RADIANT at indices {wrong_radiant}. Please check the trigger info.")
+        return None
     
     unknown_idx = np.where(trigger_type_arr == default)[0]
     if len(unknown_idx) > 0:
@@ -133,10 +152,10 @@ def check_event_numbers_according_to_trigger_types(trigger_type_arr, n_forced_tr
         found = trigger_type_counts.get(trigger_type, 0)
 
         if found != expected:
-            msg = (
-                f"Number of {trigger_type} triggers in header ({expected}) does not match the count from trigger type array ({found}). Please check the trigger info.")
-            logger.error(msg)
-            raise ValueError(msg)
+            logger.error(f"Mismatch in trigger type counts for {trigger_type}: expected {expected}, found {found}. Please check the trigger info and event numbers.")
+            return False
+
+    return True
 
 def calculate_snr(max_abs_amplitude_arr, rms_arr):
     snr_arr = np.full_like(max_abs_amplitude_arr, np.inf, dtype=float)
@@ -152,7 +171,7 @@ def choose_trigger_type_header(trigger_type_arr, trigger_type:str):
     '''Choose events based on trigger type.'''
     if trigger_type not in ["FORCE", "LT", "RADIANT0", "RADIANT1"]:
         logger.error(f"Invalid trigger type {trigger_type}. Must be one of FORCE, LT, RADIANT0 or RADIANT1.")
-        raise ValueError(f"Invalid trigger type {trigger_type}. Must be one of FORCE, LT, RADIANT0 or RADIANT1.")
+        return None
     
     mask = trigger_type_arr == trigger_type
     return mask
@@ -174,8 +193,10 @@ def read_multiple_runs(base_path, station_id, run_numbers):
 
     freqs = None
 
+    failed_runs = []
+    failed_run_info = {}
+
     for run_no in tqdm(run_numbers, desc=f"Reading monitoring and header files for runs between {run_numbers[0]} and {run_numbers[-1]} for station {station_id}"):
-        logger.info(f"Reading monitoring and header files for run {run_no} for station {station_id}")
         monitoring_file_path = os.path.join(base_path, f"station{station_id}/run{run_no}", "monitoring.root")
         header_file_path = os.path.join(base_path, f"station{station_id}/run{run_no}", "headers.root")
 
@@ -189,16 +210,43 @@ def read_multiple_runs(base_path, station_id, run_numbers):
         if header_file is None:
             missing_files.append(header_file_path)
         if missing_files:
-            logger.warning(f"Missing files for run {run_no} for station {station_id}: {missing_files}. Skipping this run.")
+            msg = f"Missing files for run {run_no} for station {station_id}: {missing_files}. Skipping this run."
+            logger.error(msg)
+            failed_runs.append(run_no)
+            failed_run_info[run_no] = msg
             continue
 
         event_info_dict = get_event_info_from_monitoring_file(monitoring_file)
         run_summary_dict = get_run_summary_from_monitoring_file(monitoring_file)
         header_info_dict = get_info_from_header_file(header_file)
 
+        if event_info_dict is None:
+            msg = f"Failed to read event info for run {run_no} for station {station_id}. Skipping this run."
+            logger.error(msg)
+            failed_runs.append(run_no)
+            failed_run_info[run_no] = msg
+            continue    
+
+        if run_summary_dict is None:
+            msg = f"Failed to read run summary info for run {run_no} for station {station_id}. Skipping this run."
+            logger.warning(msg)
+            failed_runs.append(run_no)
+            failed_run_info[run_no] = msg
+            continue
+        
+        if header_info_dict is None:
+            msg = f"Failed to read header info for run {run_no} for station {station_id}. Skipping this run."
+            logger.warning(msg)
+            failed_runs.append(run_no)
+            failed_run_info[run_no] = msg
+            continue
+
         # Some sanity checks to make sure event number and run number are consistent between monitoring and header files
         if not np.array_equal(event_info_dict["event_number_arr"], header_info_dict["event_number"]):
-            logger.error(f"Event numbers in monitoring file and header file do not match for run {run_no} for station {station_id}. Skipping the run. Please check the files.")
+            msg = f"Event numbers in monitoring file and header file do not match for run {run_no} for station {station_id}. Skipping the run. Please check the files."
+            logger.error(msg)
+            failed_runs.append(run_no)
+            failed_run_info[run_no] = msg
             continue
         
         header_station_id = np.unique(header_info_dict["station_id"])
@@ -208,27 +256,45 @@ def read_multiple_runs(base_path, station_id, run_numbers):
         run_summary_run_no = run_summary_dict["run_number"]
         
         if header_station_id.size != 1:
-            logger.error(f"Multiple station IDs found in header file for run {run_no} for station {station_id}. Found station IDs: {header_station_id}. Skipping the run. Please check the file.")
+            msg = f"Multiple station IDs found in header file for run {run_no} for station {station_id}. Found station IDs: {header_station_id}. Skipping the run. Please check the file."
+            logger.error(msg)
+            failed_runs.append(run_no)
+            failed_run_info[run_no] = msg
             continue
 
         if header_run_no.size != 1:
-            logger.error(f"Multiple run numbers found in header file for run {run_no} for station {station_id}. Found run numbers: {header_run_no}. Skipping the run. Please check the file.")
+            msg = f"Multiple run numbers found in header file for run {run_no} for station {station_id}. Found run numbers: {header_run_no}. Skipping the run. Please check the file."
+            logger.error(msg)
+            failed_runs.append(run_no)
+            failed_run_info[run_no] = msg
             continue
 
         if header_station_id[0] != station_id:
-            logger.error(f"Station ID in header file ({header_station_id[0]}) does not match the station ID in the path ({station_id}) for run {run_no}. Skipping the run. Please check the file.")
+            msg = f"Station ID in header file ({header_station_id[0]}) does not match the station ID in the path ({station_id}) for run {run_no}. Skipping the run. Please check the file."
+            logger.error(msg)
+            failed_runs.append(run_no)
+            failed_run_info[run_no] = msg
             continue
         
         if header_station_id[0] != run_summary_station_id:
-            logger.error(f"Station ID in header file ({header_station_id[0]}) does not match the station ID in monitoring file run summary ({run_summary_station_id}) for run {run_no}. Skipping the run. Please check the file.")
+            msg = f"Station ID in header file ({header_station_id[0]}) does not match the station ID in monitoring file run summary ({run_summary_station_id}) for run {run_no}. Skipping the run. Please check the file."
+            logger.error(msg)
+            failed_runs.append(run_no)
+            failed_run_info[run_no] = msg
             continue
         
         if header_run_no[0] != run_no:
-            logger.error(f"Run number in header file ({header_run_no[0]}) does not match the run number in the path ({run_no}) for run {run_no}. Skipping the run. Please check the file.")
+            msg = f"Run number in header file ({header_run_no[0]}) does not match the run number in the path ({run_no}) for run {run_no}. Skipping the run. Please check the file."
+            logger.error(msg)
+            failed_runs.append(run_no)
+            failed_run_info[run_no] = msg
             continue
         
         if header_run_no[0] != run_summary_run_no:
-            logger.error(f"Run number in header file ({header_run_no[0]}) does not match the run number in monitoring file run summary ({run_summary_run_no}) for run {run_no}. Skipping the run. Please check the file.")
+            msg = f"Run number in header file ({header_run_no[0]}) does not match the run number in monitoring file run summary ({run_summary_run_no}) for run {run_no}. Skipping the run. Please check the file."
+            logger.error(msg)
+            failed_runs.append(run_no)
+            failed_run_info[run_no] = msg
             continue
         
         # Start processing the run if all checks are passed
@@ -239,13 +305,27 @@ def read_multiple_runs(base_path, station_id, run_numbers):
             header_info_dict["which_radiant"]
         )
 
-        check_event_numbers_according_to_trigger_types(
+        if trigger_type_arr is None:
+            msg = f"Failed to assign trigger types for run {run_no} for station {station_id}. Skipping this run."
+            logger.error(msg)
+            failed_runs.append(run_no)
+            failed_run_info[run_no] = msg
+            continue
+
+        check_event_numbers = check_event_numbers_according_to_trigger_types(
             trigger_type_arr,
             run_summary_dict["n_forced_triggers"],
             run_summary_dict["n_lt_triggers"],
             run_summary_dict["n_rf0_triggers"],
             run_summary_dict["n_rf1_triggers"],
         )
+
+        if not check_event_numbers:
+            msg = f"Event number check according to trigger types failed for run {run_no} for station {station_id}. Skipping this run."
+            logger.error(msg)
+            failed_runs.append(run_no)
+            failed_run_info[run_no] = msg
+            continue
 
         # Add trigger type and some header info to event info dict for easier access later for each event
         event_info_dict["triggerType"] = trigger_type_arr # (n_events,)
@@ -284,7 +364,7 @@ def read_multiple_runs(base_path, station_id, run_numbers):
             freqs = stack_if_object(run_summary_dict["frequencies"]) # (n_freqs,)
 
         all_event_info.append(event_info_dict)
-    
+        
     if len(all_event_info) == 0:
         raise ValueError(f"No valid runs were processed for station {station_id}. Please check the files and the run numbers. Or try reading using the dataProviderRNOG method which reads from combined.root files in /inbox/ and can be used for older data before 2026 which do not have monitoring.root files.")
     
@@ -303,6 +383,8 @@ def read_multiple_runs(base_path, station_id, run_numbers):
     combined_event_info["total_n_rf0_triggers"] = total_n_rf0_triggers
     combined_event_info["total_n_rf1_triggers"] = total_n_rf1_triggers
     combined_event_info["run_event_counts"] = run_event_counts # dict with run number as key and value as another dict with n_events, n_forced_triggers, n_lt_triggers, n_rf0_triggers, n_rf1_triggers for that run
+    combined_event_info["failed_runs"] = failed_runs if len(failed_runs) > 0 else None
+    combined_event_info["failed_run_info"] = failed_run_info if len(failed_run_info) > 0 else None
 
     logger.info(f"Successfully read and combined data from {len(all_event_info)} runs for station {station_id} using the monitoring data. Total events: {total_n_events}, total FORCE triggers: {total_n_force_triggers}, total LT triggers: {total_n_lt_triggers}, total RADIANT0 triggers: {total_n_rf0_triggers}, total RADIANT1 triggers: {total_n_rf1_triggers}.")
 

@@ -13,6 +13,7 @@ import pandas as pd
 import matplotlib.dates as mdates
 from datetime import timezone
 import copy
+import csv
 
 # Import config files
 from config_files_sva.config_station import get_station_config, sampling_rate
@@ -376,6 +377,15 @@ def create_result_csv_file(station_id, run_label, n_events_force, surface_channe
     df.to_csv(out_csv_file, index=False)
     logger.info(f"Validation summary saved to {out_csv_file}")
 
+def write_failed_runs_to_csv(station_id, failed_run_info, run_label, results_dir = RESULTS_DIR):
+    failed_runs_file = os.path.join(results_dir, f"station{station_id}_failed_runs_in_runrange_{run_label}.csv")
+    with open(failed_runs_file, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Run Number", "Reason for Failure"])
+        for run_no, reason in failed_run_info.items():
+            writer.writerow([run_no, reason])
+    logger.warning(f"Failed to process some runs for station {station_id}: {list(failed_run_info.keys())}. Information about these runs has been written to {failed_runs_file} in the {results_dir} directory. Please check the file for details as this might indicate potential issues!")
+
 def write_spectral_results(ch, excess_info_results, station_id, run_label, log_once = False, reset_file = False):
     spectral_results_file = os.path.join(RESULTS_DIR, f"spectral_analysis_results_{station_id}_{run_label}.txt")
     if reset_file:
@@ -624,7 +634,10 @@ if __name__ == "__main__":
         total_n_radiant0_triggers = combined_event_info["total_n_rf0_triggers"]
         total_n_radiant1_triggers = combined_event_info["total_n_rf1_triggers"]
         run_event_counts = combined_event_info["run_event_counts"] # dict with run number as key and value as another dict with n_events, n_forced_triggers, n_lt_triggers, n_rf0_triggers, n_rf1_triggers for that run
-
+        failed_run_info = combined_event_info["failed_run_info"] # dict with run number as key and value as reason for failure, only for runs that failed to be read
+        
+        if failed_run_info:
+            write_failed_runs_to_csv(station_id, failed_run_info, run_label, results_dir=RESULTS_DIR)
 
         # Spectral info:
         freqs = combined_event_info["freqs"]
