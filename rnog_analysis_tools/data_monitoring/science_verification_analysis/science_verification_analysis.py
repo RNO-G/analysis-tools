@@ -14,6 +14,7 @@ import matplotlib.dates as mdates
 from datetime import timezone
 import copy
 import csv
+import json
 
 # Import config files
 from config_files_sva.config_station import get_station_config, sampling_rate
@@ -27,16 +28,18 @@ from config_files_sva.config_block_offsets import block_offset_limits
 from read_rnog_data_nuradio import convert_events_information, read_rnog_data
 from monitoring_data_functions_sva.get_monitoring_data_uproot import choose_trigger_type_header, read_multiple_runs
 from analysis_functions_sva.spectral_analysis_sva import find_amplitude_ratio_in_band, find_amplitude_ratio_in_band_specific_bkg, excess_info_from_ratio, excess_info_from_ratio_specific_bkg, validate_excess_in_bands
-from analysis_functions_sva.z_score_analysis_sva import calculate_statistics_log_paramater, calculate_z_score_parameter, symmetry_metrics_channel_z_score, symmetry_metrics_z_score, load_values_json, outlier_flag, find_outlier_details
+from analysis_functions_sva.z_score_analysis_sva import calculate_statistics_log_paramater, calculate_z_score_parameter, symmetry_metrics_channel_z_score, symmetry_metrics_z_score, load_values_json, outlier_flag, find_outlier_details, calculate_expected_values_per_trigger, outlier_details
 from analysis_functions_sva.vrms_analysis_sva import calculate_vrms, kde_modality, tail_fraction_and_trimmed_skew_two_sided, report_vrms_characteristics, get_rms_per_trigger_monitoring
 from analysis_functions_sva.glitching_analysis_sva import binomtest_glitch_fraction
 from analysis_functions_sva.block_offsets_analysis_sva_dataproviderrnog import get_block_offsets_after_removal, get_block_offsets_before_removal, plot_block_offsets_violin_before_after_comparison, block_offset_statistics
 from analysis_functions_sva.block_offsets_analysis_sva_monitoring import get_force_block_offsets_monitoring, block_offset_statistics_monitoring, plot_block_offsets_violin_monitoring
+from analysis_functions_sva.vrms_stability_analysis_sva import get_rms_per_run, relative_median_shift, linregress_rolling_mean, write_linregress_results, decision_metric
+
 
 # Import plotting functions
 from plotting_functions_sva.plotting_sva_spectrum import plot_time_integrated_surface_spectra_unnormalized, plot_time_integrated_surface_spectra_normalized, plot_time_integrated_deep_spectra
 from plotting_functions_sva.plotting_sva_snr import choose_day_interval, plot_snr_against_time
-from plotting_functions_sva.plotting_sva_vrms import plot_vrms_values_against_time
+from plotting_functions_sva.plotting_sva_vrms import plot_vrms_values_against_time, plot_vrms_values_against_time_single_trigger_zscore, create_heatmap_plot
 from plotting_functions_sva.plotting_sva_glitch import glitching_violin_plot, choose_bin_size, plot_glitch_q99_over_time
 from plotting_functions_sva.plotting_sva_debug import debug_plot_ratios, debug_plot_snr_distribution, debug_plot_z_score_snr, debug_plot_vrms_distribution
 
@@ -213,13 +216,15 @@ def channel_health(row):
     inv = {0: "OK", 1: "!!", 2: "X"}
     return inv[max(vals)]
 
-def create_result_csv_file(station_id, run_label, n_events_force, surface_channels, downward_channels, upward_channels, all_channels, validation_results, glitch_info, modality_dict_force, modality_dict_lt, 
-                           modality_dict_radiant0, modality_dict_radiant1, outlier_details, save_location):
+def create_result_csv_file(station_id, run_label, n_events_force, surface_channels, downward_channels, upward_channels, all_channels, validation_results, glitch_info, block_offsets_result_dict, rms_results, modality_dict_force, modality_dict_lt, 
+                           modality_dict_radiant0, modality_dict_radiant1, outlier_details, save_location, rms_label):
     out_csv_file = os.path.join(CSV_DIR, f"validation_summary_station{station_id}_{run_label}.csv")
     ch_list = list(all_channels)
 
     spectral_col = []
     glitch_col = []
+    block_offset_col = []
+    rms_stability_col = []
     modality_force_col = []
     modality_lt_col = []
     modality_radiant0_col = []
@@ -279,6 +284,13 @@ def create_result_csv_file(station_id, run_label, n_events_force, surface_channe
             glitch_col.append(glitch_val)
 
         # Vrms analysis column
+        if rms_results[ch] is None:
+            rms_val = "-"
+            rms_stability_col.append(rms_val)
+        else:
+            rms_value = rms_results[ch].get("decision", "-")
+            rms_stability_col.append(rms_value)
+
         if modality_dict_force is None:
             modality_value = "-"
             modality_force_col.append(modality_value)
@@ -350,30 +362,41 @@ def create_result_csv_file(station_id, run_label, n_events_force, surface_channe
                 snr_value = "OK"
 
             elif max_delta < 5.0:
-                snr_value = "OK" if frac_out < 0.01 else "!!"
+                snr_value = "OK" if frac_out < 0.002 else "!!"
 
             else:  # max_delta >= 5
-                if n_out == 1 and frac_out < 0.001:
+                if n_out == 1 and frac_out < 0.002:
                     snr_value = "OK"
-                elif frac_out < 0.01:
+                elif frac_out < 0.004:
                     snr_value = "!!"
                 else:
                     snr_value = "X"
         snr_col.append(snr_value)
 
+        # Block offsets column
+        block_offset_result = block_offsets_result_dict.get(ch, None)
+        if block_offset_result is None:
+            block_offset_val = "-"
+            block_offset_col.append(block_offset_val)
+        else:
+            block_offset_val = block_offset_result
+            block_offset_col.append(block_offset_val)
+        
     df = pd.DataFrame({
         "Channel": ch_list,
         "SNR": snr_col,
         "Galaxy (FORCE)": spectral_col,
-        "Vrms (FORCE)": modality_force_col,
-        "Vrms (LT)": modality_lt_col,
-        "Vrms (RADIANT0)": modality_radiant0_col,
-        "Vrms (RADIANT1)": modality_radiant1_col,
+        f"{rms_label.capitalize()} Stability (FORCE)": rms_stability_col,
+        f"{rms_label.capitalize()} (FORCE)": modality_force_col,
+        f"{rms_label.capitalize()} (LT)": modality_lt_col,
+        f"{rms_label.capitalize()} (RADIANT0)": modality_radiant0_col,
+        f"{rms_label.capitalize()} (RADIANT1)": modality_radiant1_col,
         "Glitching": glitch_col,
+        "Block Offsets": block_offset_col
     })
 
-    health_cols =["SNR", "Galaxy (FORCE)", "Vrms (FORCE)", "Vrms (LT)", "Vrms (RADIANT0)", "Vrms (RADIANT1)", "Glitching"]
-    df["Channel Health"] = df[health_cols].apply(channel_health, axis=1)
+    health_cols =["SNR", "Galaxy (FORCE)", f"{rms_label.capitalize()} Stability (FORCE)", f"{rms_label.capitalize()} (FORCE)", "Glitching"]
+    df["Channel Health (FORCE)"] = df[health_cols].apply(channel_health, axis=1)
     df.to_csv(out_csv_file, index=False)
     logger.info(f"Validation summary saved to {out_csv_file}")
 
@@ -402,8 +425,8 @@ def write_spectral_results(ch, excess_info_results, station_id, run_label, log_o
         logger.info(f"Spectral analysis results written to {spectral_results_file}")
 
     
-def write_snr_outlier_details(outlier_details, station_id, run_label, results_dir =  RESULTS_DIR):
-    outlier_results_file = os.path.join(results_dir, f"snr_details_{station_id}_{run_label}.txt")
+def write_snr_outlier_details(outlier_details, station_id, run_label, n_events_force, results_dir =  RESULTS_DIR):
+    outlier_results_file = os.path.join(results_dir, f"force_snr_details_{station_id}_{run_label}.txt")
     with open(outlier_results_file, "w") as f:
         for ch in sorted(outlier_details.keys()):
             entries = outlier_details[ch]
@@ -414,15 +437,22 @@ def write_snr_outlier_details(outlier_details, station_id, run_label, results_di
                 continue
 
             k_ch = entries[0]["k"]
-            f.write(f"\nChannel {ch:02d}:\n {n_outliers} outliers (k = {k_ch:.2f})\n")
+            outlier_fraction = n_outliers / n_events_force if n_events_force > 0 else 0.0
+            max_delta = max(abs(e.get("z_minus_k", 0.0)) for e in entries)
+            f.write(f"\nChannel {ch:02d}:\n {n_outliers} outliers (k = {k_ch:.2f}), outlier fraction: {outlier_fraction:.2f}, max delta: {max_delta:.2f}\n")
             
             for e in entries:
                 f.write(f"  - run {e['run']}, event {e['eventNumber']}, |z| = {e['z_abs']:.2f} (delta = {e['z_minus_k']:.2f} above k)\n")
             
     logger.info(f"SNR outlier details written to {outlier_results_file}")
 
-def write_vrms_outlier_details(outlier_details, station_id, run_label, trigger_label, results_dir =  RESULTS_DIR):
-    outlier_results_file = os.path.join(results_dir, f"vrms_details_{station_id}_{run_label}_{trigger_label}.txt")
+def write_vrms_outlier_details(outlier_details, station_id, run_label, trigger_label, n_events, results_dir =  RESULTS_DIR, use_monitoring = False):
+    if use_monitoring:
+        file_label = "rms"
+    else:
+        file_label = "vrms"
+    
+    outlier_results_file = os.path.join(results_dir, f"{file_label}_details_{station_id}_{run_label}_{trigger_label}.txt")
     with open(outlier_results_file, "w") as f:
         for ch in sorted(outlier_details.keys()):
             entries = outlier_details[ch]
@@ -433,21 +463,28 @@ def write_vrms_outlier_details(outlier_details, station_id, run_label, trigger_l
                 continue
 
             k_ch = entries[0]["k"]
-            f.write(f"\nChannel {ch:02d}:\n {n_outliers} outliers (k = {k_ch:.2f})\n")
+            outlier_fraction = n_outliers / n_events if n_events > 0 else 0.0
+            max_delta = max(abs(e.get("z_minus_k", 0.0)) for e in entries)
+            f.write(f"\nChannel {ch:02d}:\n {n_outliers} outliers (k = {k_ch:.2f}), outlier fraction: {outlier_fraction:.2f}, max delta: {max_delta:.2f}\n")
             
             for e in entries:
                 f.write(f"  - run {e['run']}, event {e['eventNumber']}, |z| = {e['z_abs']:.2f} (delta = {e['z_minus_k']:.2f} above k)\n")
             
-    logger.info(f"Vrms outlier details written to {outlier_results_file}")
+    logger.info(f"{file_label.capitalize()} outlier details written to {outlier_results_file}")
 
-def write_vrms_modality_results(modality, tail_label, trigger_label, station_id, run_label):
-    modality_results_file = os.path.join(RESULTS_DIR, f"vrms_modality_{station_id}_{run_label}_{trigger_label}.txt")
+def write_vrms_modality_results(modality, tail_label, trigger_label, station_id, run_label, use_monitoring = False):
+    if use_monitoring:
+        file_label = "rms"
+    else:
+        file_label = "vrms"
+    
+    modality_results_file = os.path.join(RESULTS_DIR, f"{file_label}_modality_{station_id}_{run_label}_{trigger_label}.txt")
     with open(modality_results_file, "w") as f:
         for ch in sorted(modality.keys()):
             modality_result = modality[ch]
             tail_label_result = tail_label[ch]
             f.write(f"Channel {ch} ({trigger_label} events): {modality_result} ({tail_label_result})\n")
-    logger.info(f"Vrms modality results for {trigger_label} events written to {modality_results_file}")
+    logger.info(f"{file_label.capitalize()} modality results for {trigger_label} events written to {modality_results_file}")
 
 def write_glitching_results(glitch_info, station_id, run_label):
     glitch_results_file = os.path.join(RESULTS_DIR, f"glitching_analysis_results_{station_id}_{run_label}.txt")
@@ -468,6 +505,7 @@ def write_glitching_results(glitch_info, station_id, run_label):
 
 def write_block_offset_results(block_offset_stats, station_id, run_label, use_monitoring=False):
     block_offset_results_file = os.path.join(RESULTS_DIR, f"block_offset_analysis_results_{station_id}_{run_label}.txt")
+    results_dict = {}
     with open(block_offset_results_file, "w") as f:
         for ch in sorted(block_offset_stats.keys()):
             stats = block_offset_stats[ch]
@@ -475,9 +513,14 @@ def write_block_offset_results(block_offset_stats, station_id, run_label, use_mo
                 f.write(f"Channel {ch:02d}:\n")
                 f.write(f"  Mean block offset: {stats['mean']}, median: {stats['median']}, std: {stats['std']}, IQR: {stats['iqr']}\n")
                 if stats["median"] > block_offset_limits["median"]:
+                    results_dict[ch] = "X"
                     logger.warning(f"Channel {ch:02d} has a high median block offset of {stats['median']}, which may indicate a potential issue with the channel.")
                 elif stats["iqr"] > block_offset_limits["iqr"]:
+                    results_dict[ch] = "X"
                     logger.warning(f"Channel {ch:02d} has a high IQR of block offsets ({stats['iqr']}), indicating significant variability that may need further investigation.")
+                else:
+                    results_dict[ch] = "OK"
+            
             else:
                 f.write(f"Channel {ch:02d}:\n")
                 f.write(f"  Before removal - mean: {stats['before_mean']} V, median: {stats['before_median']} V, std: {stats['before_std']} V, IQR: {stats['iqr_before']} V\n")
@@ -486,14 +529,22 @@ def write_block_offset_results(block_offset_stats, station_id, run_label, use_mo
                 f.write(f"  IQR reduction fraction: {stats['iqr_reduction_fraction']*100:.1f}%\n")
 
                 if stats["before_median"] > block_offset_limits["median"]:
+                    results_dict[ch] = "X"
                     logger.warning(f"Channel {ch:02d} has a high median block offset of {stats['before_median']} V before removal, which may indicate a potential issue with the channel.")
                 elif stats["iqr_before"] > block_offset_limits["iqr"]:
+                    results_dict[ch] = "X"
                     logger.warning(f"Channel {ch:02d} has a high IQR of block offsets ({stats['iqr_before']} V) before removal, indicating significant variability that may need further investigation.")
                 elif stats["after_median"] > block_offset_limits["median"]:
+                    results_dict[ch] = "X"
                     logger.warning(f"Channel {ch:02d} has a relatively high median block offset of {stats['after_median']} V after removal, removal was not fully effective.")
                 elif stats["iqr_after"] > block_offset_limits["iqr"]:
+                    results_dict[ch] = "X"
                     logger.warning(f"Channel {ch:02d} has a relatively high IQR of block offsets ({stats['iqr_after']} V) after removal, indicating that there may still be significant variability in block offsets.")
+                else:
+                    results_dict[ch] = "OK"
+    
     logger.info(f"Block offset analysis results written to {block_offset_results_file}")
+    return results_dict
 
 if __name__ == "__main__":
 
@@ -526,8 +577,10 @@ if __name__ == "__main__":
     if method == "dataProviderRNOG":
         use_monitoring = False
         logger.info("Using dataProviderRNOG method to read data")
+        rms_label = "vrms"
     else:
         logger.info("Using monitoring method to read data")
+        rms_label = "rms"
 
     station_id = args.station_id
     backend = args.backend
@@ -618,26 +671,38 @@ if __name__ == "__main__":
         run_event_counts = None # Not available when reading with dataProviderRNOG, only with monitoring data, used for spectral plotting
         run_no_force = event_info["run"][force_mask]
         event_number_force = event_info["eventNumber"][force_mask]
+        n_event_force = spec_arr_force.shape[1]
 
     elif use_monitoring == True:
         combined_event_info = read_multiple_runs(base_path = base_data_path, station_id = station_id, run_numbers=run_numbers)
-
+        
         #General info:
-        run_no = combined_event_info["run_no"]
-        trigger_type_arr = combined_event_info["triggerType"]
         times = combined_event_info["trigger_time_utc"]
-        max_abs_amplitude_arr = combined_event_info["max_abs_amplitude_arr"]
-        event_number_arr = combined_event_info["event_number_arr"]
-        total_n_events = combined_event_info["total_n_events"]
-        total_n_force_triggers = combined_event_info["total_n_force_triggers"]
-        total_n_lt_triggers = combined_event_info["total_n_lt_triggers"]
-        total_n_radiant0_triggers = combined_event_info["total_n_rf0_triggers"]
-        total_n_radiant1_triggers = combined_event_info["total_n_rf1_triggers"]
+        valid_times_mask = ~pd.isna(times)
+        times = times[valid_times_mask]
+        invalid_runs = np.unique(combined_event_info["run_no"][~valid_times_mask])
+        
+        run_no = combined_event_info["run_no"][valid_times_mask]
+        trigger_type_arr = combined_event_info["triggerType"][valid_times_mask]
+        
+        max_abs_amplitude_arr = combined_event_info["max_abs_amplitude_arr"][:, valid_times_mask]
+        event_number_arr = combined_event_info["event_number_arr"][valid_times_mask]
         run_event_counts = combined_event_info["run_event_counts"] # dict with run number as key and value as another dict with n_events, n_forced_triggers, n_lt_triggers, n_rf0_triggers, n_rf1_triggers for that run
         failed_run_info = combined_event_info["failed_run_info"] # dict with run number as key and value as reason for failure, only for runs that failed to be read
+        failed_run_info = combined_event_info["failed_run_info"] or {}
+        failed_runs = list(failed_run_info.keys())
+
+        if len(invalid_runs) > 0:
+            logger.warning(f"Some events have invalid trigger times and will be excluded from the analysis, events belong to the runs: {list(map(int, invalid_runs))}. ")
+            for invalid_run in invalid_runs:
+                failed_run_info[int(invalid_run)] = "Some events have been skipped in the analysis due to invalid timestamps, check logs for details"
         
         if failed_run_info:
             write_failed_runs_to_csv(station_id, failed_run_info, run_label, results_dir=RESULTS_DIR)
+        n_events_force = combined_event_info["total_n_force_triggers"]
+        n_lt_events = combined_event_info["total_n_lt_triggers"]
+        n_radiant0_events = combined_event_info["total_n_rf0_triggers"]
+        n_radiant1_events = combined_event_info["total_n_rf1_triggers"]
 
         # Spectral info:
         freqs = combined_event_info["freqs"]
@@ -648,10 +713,10 @@ if __name__ == "__main__":
         spec_arr_radiant1 = combined_event_info["avg_spectrum_rf1"]
 
         # Glitching, SNR and block offset info:
-        rms_arr = combined_event_info["rms_arr"]
-        glitch_arr = combined_event_info["glitching_test_statistic_arr"]
-        block_offsets_arr = combined_event_info["block_offsets_arr"]
-        snr_arr = combined_event_info["snr_arr"] 
+        rms_arr = combined_event_info["rms_arr"][:, valid_times_mask]
+        glitch_arr = combined_event_info["glitching_test_statistic_arr"][:, valid_times_mask]
+        block_offsets_arr = combined_event_info["block_offsets_arr"][:, valid_times_mask]
+        snr_arr = combined_event_info["snr_arr"][:, valid_times_mask]
 
         norm_spec_arr_force, scale_factors_force = normalize_channels(spec_arr_force, freqs, downward_channels, upward_channels)
         
@@ -667,6 +732,9 @@ if __name__ == "__main__":
     else:
         raise ValueError("Invalid method for reading data, should be either 'monitoring' or 'dataProviderRNOG'")
     
+    excluded_runs = args.exclude_runs if args.exclude_runs else []
+    excluded_runs.extend(failed_runs)
+
     # Bands for spectral analysis
     band_config = copy.deepcopy(SPECTRAL_BANDS)
 
@@ -735,7 +803,7 @@ if __name__ == "__main__":
     flag_outliers_snr = outlier_flag(z_score_arr_log_snr, k_values_log_snr, all_channels)
 
     outlier_details_snr = find_outlier_details(z_score_arr_log_snr, k_values_log_snr, flag_outliers_snr, all_channels, run_no_force, event_number_force)
-    write_snr_outlier_details(outlier_details_snr, station_id, run_label, results_dir=RESULTS_DIR)
+    write_snr_outlier_details(outlier_details_snr, station_id, run_label, n_events_force, results_dir=RESULTS_DIR)
 
     day_interval = choose_day_interval(times)
     plot_snr_against_time(station_id, times_force, snr_arr_force, flag_outliers_snr, z_score_arr_log_snr, k_values_log_snr, all_channels, save_location, run_label, nrows=12, ncols=2, day_interval=day_interval)
@@ -790,6 +858,24 @@ if __name__ == "__main__":
     debug_plot_vrms_distribution(vrms_arr_radiant1, modality_dict_radiant1, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="RADIANT1", save_location=save_location, n_rows=12, n_cols=2, use_monitoring=use_monitoring)
     debug_plot_vrms_distribution(vrms_arr_lt, modality_dict_lt, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="LT", save_location=save_location, n_rows=12, n_cols=2, use_monitoring=use_monitoring)
     
+    # Vrms stability
+    reference_filename_rms = f"expected_{rms_label}/expected_{rms_label}_station{station_id}.json"
+    vrms_k_values, vrms_ref_mean, vrms_ref_std = load_values_json(REFERENCE_DIR, reference_filename_rms)
+    z_score_arr_vrms_force = calculate_z_score_parameter(vrms_arr_force, vrms_ref_mean, vrms_ref_std, all_channels)
+    flag_outliers_vrms_force = outlier_flag(z_score_arr_vrms_force, vrms_k_values, all_channels)
+    outlier_details_vrms_force = find_outlier_details(z_score_arr_vrms_force, vrms_k_values, flag_outliers_vrms_force, channel_list=all_channels, run_no=run_no_force, event_number=event_number_force)
+    write_vrms_outlier_details(outlier_details_vrms_force, station_id, run_label, trigger_label="FORCE", n_events=n_events_force, results_dir=RESULTS_DIR, use_monitoring=use_monitoring)
+    plot_vrms_values_against_time_single_trigger_zscore(times_force, vrms_arr_force, flag_outliers_vrms_force, z_score_arr_vrms_force, vrms_k_values, trigger_name = "FORCE", channel_list = all_channels, station_id=station_id, run_label=run_label, save_location=save_location, n_rows=12, n_cols=2, day_interval=day_interval, use_monitoring=use_monitoring)
+
+    rms_arr_per_run_dict_force = get_rms_per_run(vrms_arr_force, run_no_force)
+    relative_median_shift_results = relative_median_shift(rms_arr_per_run_dict_force, all_channels)
+    with open(os.path.join(RESULTS_DIR, f"{rms_label}_relative_median_shift_results_force_trigger_station{station_id}_{run_label}.json"), "w") as f:
+        json.dump(relative_median_shift_results, f, indent=4)
+    create_heatmap_plot(relative_median_shift_results, label = "Relative Median Shift", save_dir = PLOTS_DIR, channel_list=all_channels, station_id = station_id,matrix_key = "median_shift_matrix", run_label=run_label, cmap="Reds")
+    rms_results = decision_metric(outlier_details_vrms_force, relative_median_shift_results, n_events_force=n_events_force, channels=all_channels)
+    with open(os.path.join(RESULTS_DIR, f"rms_stability_decision_results_force_trigger_station{station_id}_{run_label}.json"), "w") as f:
+        json.dump(rms_results, f, indent=4)
+    
     ##### Glitching analysis - Same for both monitoring and dataProviderRNOG 
     logger.info("Starting glitching analysis...")
     config_glitching = copy.deepcopy(config_glitching_values)
@@ -808,7 +894,7 @@ if __name__ == "__main__":
         block_offset_arr_force = get_force_block_offsets_monitoring(block_offsets_arr, force_mask)
         block_offset_stats = block_offset_statistics_monitoring(block_offset_arr_force=block_offset_arr_force, channel_list=all_channels)
         
-        write_block_offset_results(block_offset_stats, station_id, run_label, use_monitoring=use_monitoring)
+        block_offset_results_dict = write_block_offset_results(block_offset_stats, station_id, run_label, use_monitoring=use_monitoring)
         plot_block_offsets_violin_monitoring(block_offset_arr_force, all_channels, station_id, run_label, save_location)
     
     else:
@@ -817,7 +903,7 @@ if __name__ == "__main__":
         fit_block_offsets_after = get_block_offsets_after_removal(trace_arr, event_info, all_channels, sampling_rate=sr)
 
         block_offset_stats = block_offset_statistics(fit_block_offsets_before, fit_block_offsets_after, all_channels)
-        write_block_offset_results(block_offset_stats, station_id, run_label, use_monitoring=use_monitoring)
+        block_offset_results_dict = write_block_offset_results(block_offset_stats, station_id, run_label, use_monitoring=use_monitoring)
         plot_block_offsets_violin_before_after_comparison(fit_block_offsets_before, fit_block_offsets_after, all_channels, station_id, run_label, save_location)
 
     # Debug plots
@@ -827,7 +913,6 @@ if __name__ == "__main__":
         debug_plot_z_score_snr(z_score_arr_log_snr, channel_list=all_channels, save_location=save_location, station_id=station_id, run_label=run_label, bins=30)   
         
     # Create summary CSV file
-    n_events_force = spec_arr_force.shape[1]
     create_result_csv_file(
         station_id,
         run_label,
@@ -838,11 +923,14 @@ if __name__ == "__main__":
         all_channels,
         all_validation_results,
         glitch_info,
+        block_offset_results_dict,
+        rms_results,
         modality_dict_force,
         modality_dict_lt,
         modality_dict_radiant0,
         modality_dict_radiant1,
         outlier_details_snr,
         save_location,
+        rms_label
     )
     

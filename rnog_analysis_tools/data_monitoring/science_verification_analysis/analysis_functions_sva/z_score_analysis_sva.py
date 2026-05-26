@@ -5,6 +5,8 @@ import logging
 from scipy.stats import skew
 import os
 import json
+import pandas as pd
+from astropy.time import Time
 
 logger = logging.getLogger(__name__)
 
@@ -76,12 +78,26 @@ def save_values_json(k_values_log, mean_values_log, std_values_log, filename, SC
     else:
         filepath = filename
 
+    # Track capped k-values
+    capped_k_values_high = {f"Ch{ch}": float(k_values_log[ch]) for ch in k_values_log if float(k_values_log[ch]) >= 5}
+    capped_k_values_low = {f"Ch{ch}": float(k_values_log[ch]) for ch in k_values_log if float(k_values_log[ch]) <= 3}
+    
     # Add metadata
+    if metadata is None:
+        metadata = {}
+    else:
+        metadata = metadata.copy()
+    
+    if capped_k_values_high:
+        metadata["comment"] = f"k values above 5 are set to 4: {capped_k_values_high}"
+    if capped_k_values_low:
+        metadata["comment"] = f"k values below 3 are set to 3: {capped_k_values_low}"
+    
     output = {
-        "metadata": metadata if metadata is not None else {},
+        "metadata": metadata,
         "values": {
             ch: {
-                "k_value": float(k_values_log[ch]),
+                "k_value": float(k_values_log[ch]) if 3 < float(k_values_log[ch]) < 5 else (4.0 if float(k_values_log[ch]) > 5 else 3.0),
                 "mean": float(mean_values_log[ch]),
                 "std": float(std_values_log[ch]),
             } for ch in k_values_log
@@ -153,6 +169,77 @@ def find_outlier_details(z_score_log, k_values_log, flag, channel_list, run_no, 
 
     return outlier_details
 
+#### Calculate z score from rolling mean and std
+def calculate_z_score_rolling(parameter_arr, run_no, channel_list):
+    '''Calculate z-score using a rolling mean and std for each channel.'''
+    z_score_arr = np.zeros((len(parameter_arr), len(parameter_arr[0])))
+    rolling_mean_arr = np.zeros((len(parameter_arr), len(parameter_arr[0])))
+    rolling_std_arr = np.zeros((len(parameter_arr), len(parameter_arr[0])))
+
+    run_no_unique = np.unique(run_no)
+    n_runs = len(run_no_unique)
+
+    for ch in channel_list:
+        parameter_arr_ch = parameter_arr[ch]
+        window_size = int(len(parameter_arr_ch)/n_runs) 
+        parameter_series = pd.Series(parameter_arr_ch)
+        rolling_mean = parameter_series.rolling(window=window_size, min_periods=1).mean()
+        rolling_std = parameter_series.rolling(window=window_size, min_periods=1).std()
+        z_score_arr_ch = (parameter_series - rolling_mean) / rolling_std
+        z_score_arr[ch, :] = z_score_arr_ch.values
+        rolling_mean_arr[ch, :] = rolling_mean.values
+        rolling_std_arr[ch, :] = rolling_std.values
+
+    return z_score_arr, rolling_mean_arr, rolling_std_arr
+
+def metadata_dict(station_id, first_run, last_run, times, trigger_type="FORCE", excluded_runs=None, comment=""):
+    '''Create a metadata dictionary to save with the expected values, containing station ID, run numbers and time period.'''
+    if isinstance(times, Time):
+        start_time = times.min().iso
+        end_time = times.max().iso
+    else:
+        start_time = str(np.min(times))
+        end_time = str(np.max(times))
+
+    metadata = {
+        "station_id": station_id,
+        "run_range": f"{first_run} - {last_run}",
+        "excluded_runs": excluded_runs if excluded_runs else None,
+        "n_events": len(times),
+        "trigger_type": trigger_type,
+        "start_time": start_time,
+        "end_time": end_time,
+        "comment": comment
+    }
+    logger.info(f"Metadata for expected values: {metadata}")
+    return metadata
+
+def calculate_expected_values_per_trigger(station_id, first_run, last_run, vrms_arr_trigger, times_trigger, trigger_type, excluded_runs, run_no,all_channels, comment=""):
+    '''Calculate expected values for a given trigger type.'''
+    vrms_mean = np.mean(vrms_arr_trigger, axis=1)
+    vrms_std = np.std(vrms_arr_trigger, axis=1)
+
+    z_score = calculate_z_score_parameter(vrms_arr_trigger, vrms_mean, vrms_std, all_channels)
+    z_score_rolling, rolling_mean, rolling_std = calculate_z_score_rolling(vrms_arr_trigger, run_no, all_channels)
+    k_values = find_k_value(z_score, all_channels, quantile=0.999)
+
+    metadata = metadata_dict(station_id, first_run, last_run, times_trigger, trigger_type=trigger_type, excluded_runs=excluded_runs, comment=comment)
+    
+    return z_score, z_score_rolling, k_values, vrms_mean, vrms_std, metadata, rolling_mean, rolling_std
+
+def outlier_details(z_score, k_values, channels, run_no, event_number_arr, trigger_label, max_k=4):
+    '''Find details of outlier events.'''
+    k_values = k_values.copy()
+
+    for ch in channels:
+        if k_values[ch] > max_k:
+            logger.warning(f"Calculated k-value for channel {ch} for trigger {trigger_label} is {k_values[ch]:.2f}. Setting it to {max_k}.")
+            k_values[ch] = max_k
+
+    flag_outliers = outlier_flag(z_score, k_values, channels)
+    outlier_details = find_outlier_details(z_score, k_values, flag_outliers, channels, run_no, event_number_arr)
+
+    return flag_outliers, outlier_details
 
 
 

@@ -5,7 +5,7 @@ import numpy as np
 from argparse import ArgumentParser
 import json
 import sys
-from astropy.time import Time
+import pandas as pd
 
 SCRIPT_DIR_REF = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.dirname(SCRIPT_DIR_REF)
@@ -13,12 +13,13 @@ sys.path.insert(0, PARENT_DIR)
 
 logger = logging.getLogger(__name__)
 
-from analysis_functions_sva.z_score_analysis_sva import calculate_z_score_parameter, find_k_value, save_values_json, outlier_flag, find_outlier_details
-from plotting_functions_sva.plotting_sva_vrms import plot_vrms_values_against_time_single_trigger_zscore
+from analysis_functions_sva.z_score_analysis_sva import outlier_details, calculate_z_score_parameter, find_k_value, save_values_json, outlier_flag, find_outlier_details, calculate_z_score_rolling, metadata_dict, calculate_expected_values_per_trigger
+from plotting_functions_sva.plotting_sva_vrms import plot_vrms_values_against_time_single_trigger_zscore, plot_rolling_mean_std, plot_rolling_mean_linregress, create_heatmap_plot
 from config_files_sva.config_station import get_station_config, sampling_rate
 import science_verification_analysis as sva
 from monitoring_data_functions_sva.get_monitoring_data_uproot import read_multiple_runs, choose_trigger_type_header
 from analysis_functions_sva.vrms_analysis_sva import get_rms_per_trigger_monitoring, calculate_vrms
+from analysis_functions_sva.vrms_stability_analysis_sva import get_rms_per_run, relative_median_shift, linregress_rolling_mean, write_linregress_results, decision_metric
 
 def setup_logging(station_id, run_label):
 
@@ -35,46 +36,6 @@ def setup_logging(station_id, run_label):
     )
 
     logger.info(f"Logging to {log_file}")
-
-def metadata_dict(station_id, first_run, last_run, times, trigger_type="FORCE", comment=""):
-    '''Create a metadata dictionary to save with the expected values, containing station ID, run numbers and time period.'''
-    if isinstance(times, Time):
-        start_time = times.min().iso
-        end_time = times.max().iso
-    else:
-        start_time = str(np.min(times))
-        end_time = str(np.max(times))
-
-    metadata = {
-        "station_id": station_id,
-        "run_range": f"{first_run} - {last_run}",
-        "excluded_runs": args.exclude_runs if args.exclude_runs else None,
-        "n_events": len(times),
-        "trigger_type": trigger_type,
-        "start_time": start_time,
-        "end_time": end_time,
-        "comment": comment
-    }
-    logger.info(f"Metadata for expected values: {metadata}")
-    return metadata
-
-def calculate_expected_values_per_trigger(vrms_arr_trigger, times_trigger, trigger_type, all_channels):
-    '''Calculate expected values for a given trigger type.'''
-    vrms_mean = np.mean(vrms_arr_trigger, axis=1)
-    vrms_std = np.std(vrms_arr_trigger, axis=1)
-
-    z_score = calculate_z_score_parameter(vrms_arr_trigger, vrms_mean, vrms_std, all_channels)
-    k_values = find_k_value(z_score, all_channels, quantile=0.999)
-
-    metadata = metadata_dict(station_id, first_run, last_run, times_trigger, trigger_type=trigger_type, comment="")
-    
-    return z_score, k_values, vrms_mean, vrms_std, metadata
-
-def outlier_details(z_score, k_values, channels, run_no, event_number_arr):
-    '''Find details of outlier events.'''
-    flag_outliers = outlier_flag(z_score, k_values, channels)
-    outlier_details = find_outlier_details(z_score, k_values, flag_outliers, channels, run_no, event_number_arr)
-    return flag_outliers, outlier_details
 
 if __name__ == "__main__":
 
@@ -191,14 +152,28 @@ if __name__ == "__main__":
         times = combined_event_info["trigger_time_utc"]
         run_no = combined_event_info["run_no"]
         event_number_arr = combined_event_info["event_number_arr"]
+        failed_run_info = combined_event_info["failed_run_info"] # dict with run number as key and value as reason for failure, only for runs that failed to be read
+        failed_run_info = combined_event_info["failed_run_info"] or {}
+        failed_runs = list(failed_run_info.keys())
 
+        valid_times_mask = ~pd.isna(times)
+        if np.any(~valid_times_mask):
+            invalid_runs = np.unique(run_no[~valid_times_mask])
+            logger.warning(f"Found {np.sum(~valid_times_mask)} invalid timestamps in runs {invalid_runs}. These events will be skipped in the analysis.")
+            times = times[valid_times_mask]
+            rms_arr = rms_arr[:, valid_times_mask]
+            trigger_type_arr = trigger_type_arr[valid_times_mask]
+            run_no = run_no[valid_times_mask]
+            event_number_arr = event_number_arr[valid_times_mask]
+
+            for invalid_run in invalid_runs:
+                failed_run_info[invalid_run] = "Some events have been skipped in the analysis due to invalid timestamps, check logs for details"
+        
         force_mask = choose_trigger_type_header(trigger_type_arr, "FORCE")
         lt_mask = choose_trigger_type_header(trigger_type_arr, "LT")
         radiant0_mask = choose_trigger_type_header(trigger_type_arr, "RADIANT0")
         radiant1_mask = choose_trigger_type_header(trigger_type_arr, "RADIANT1")
-
-        failed_run_info = combined_event_info["failed_run_info"] # dict with run number as key and value as reason for failure, only for runs that failed to be read
-
+   
         if failed_run_info:
             sva.write_failed_runs_to_csv(station_id, failed_run_info, run_label, results_dir=RESULTS_DIR_REF)
 
@@ -216,35 +191,59 @@ if __name__ == "__main__":
 
         vrms_arr,vrms_arr_force, vrms_arr_radiant0, vrms_arr_radiant1, vrms_arr_lt = get_rms_per_trigger_monitoring(rms_arr=rms_arr, force_mask=force_mask, lt_mask=lt_mask, radiant0_mask=radiant0_mask, radiant1_mask=radiant1_mask)
 
-
-    logger.info(f"Start calculating expected values for {parameter_label.capitalize()} parameter...") 
+    excluded_runs = args.exclude_runs if args.exclude_runs else []
+    excluded_runs.extend(failed_runs)
+    
+    logger.info(f"Start calculating expected values for {parameter_label} parameter...") 
     times_force = times[force_mask]
     times_radiant0 = times[radiant0_mask]
     times_radiant1 = times[radiant1_mask]
     times_lt = times[lt_mask]
 
-    z_score_force, k_values_force, vrms_mean_force, vrms_std_force, metadata_force = calculate_expected_values_per_trigger(vrms_arr_force, times_force, trigger_type="FORCE", all_channels=all_channels)
-    z_score_radiant0, k_values_radiant0, vrms_mean_radiant0, vrms_std_radiant0, metadata_radiant0 = calculate_expected_values_per_trigger(vrms_arr_radiant0, times_radiant0, trigger_type="RADIANT0", all_channels=all_channels)
-    z_score_radiant1, k_values_radiant1, vrms_mean_radiant1, vrms_std_radiant1, metadata_radiant1 = calculate_expected_values_per_trigger(vrms_arr_radiant1, times_radiant1, trigger_type="RADIANT1", all_channels=all_channels)
-    z_score_lt, k_values_lt, vrms_mean_lt, vrms_std_lt, metadata_lt = calculate_expected_values_per_trigger(vrms_arr_lt, times_lt, trigger_type="LT", all_channels=all_channels)
+    z_score_force, z_score_rolling_force, k_values_force, vrms_mean_force, vrms_std_force, metadata_force, rolling_mean_force, rolling_std_force = calculate_expected_values_per_trigger(station_id, first_run, last_run, vrms_arr_force, times_force, trigger_type="FORCE", excluded_runs=excluded_runs, run_no=run_no, all_channels=all_channels)
+    z_score_radiant0, z_score_rolling_radiant0, k_values_radiant0, vrms_mean_radiant0, vrms_std_radiant0, metadata_radiant0, rolling_mean_radiant0, rolling_std_radiant0 = calculate_expected_values_per_trigger(station_id, first_run, last_run, vrms_arr_radiant0, times_radiant0, trigger_type="RADIANT0", excluded_runs=excluded_runs, run_no=run_no, all_channels=all_channels)
+    z_score_radiant1, z_score_rolling_radiant1, k_values_radiant1, vrms_mean_radiant1, vrms_std_radiant1, metadata_radiant1, rolling_mean_radiant1, rolling_std_radiant1 = calculate_expected_values_per_trigger(station_id, first_run, last_run, vrms_arr_radiant1, times_radiant1, trigger_type="RADIANT1", excluded_runs=excluded_runs, run_no=run_no, all_channels=all_channels)
+    z_score_lt, z_score_rolling_lt, k_values_lt, vrms_mean_lt, vrms_std_lt, metadata_lt, rolling_mean_lt, rolling_std_lt = calculate_expected_values_per_trigger(station_id, first_run, last_run, vrms_arr_lt, times_lt, trigger_type="LT", excluded_runs=excluded_runs, run_no=run_no, all_channels=all_channels)
 
     if args.save_values:
         save_values_json(k_values_force, vrms_mean_force, vrms_std_force, filename=f"expected_{parameter_label}_station{station_id}.json", SCRIPT_DIR=EXPECTED_VALUES_DIR_REF, metadata=metadata_force)
-        save_values_json(k_values_radiant0, vrms_mean_radiant0, vrms_std_radiant0, filename=f"expected_{parameter_label}_radiant0_station{station_id}.json", SCRIPT_DIR=EXPECTED_VALUES_DIR_REF, metadata=metadata_radiant0)
-        save_values_json(k_values_radiant1, vrms_mean_radiant1, vrms_std_radiant1, filename=f"expected_{parameter_label}_radiant1_station{station_id}.json", SCRIPT_DIR=EXPECTED_VALUES_DIR_REF, metadata=metadata_radiant1)
-        save_values_json(k_values_lt, vrms_mean_lt, vrms_std_lt, filename=f"expected_{parameter_label}_lt_station{station_id}.json", SCRIPT_DIR=EXPECTED_VALUES_DIR_REF, metadata=metadata_lt)
+        # save_values_json(k_values_radiant0, vrms_mean_radiant0, vrms_std_radiant0, filename=f"expected_{parameter_label}_radiant0_station{station_id}.json", SCRIPT_DIR=EXPECTED_VALUES_DIR_REF, metadata=metadata_radiant0)
+        # save_values_json(k_values_radiant1, vrms_mean_radiant1, vrms_std_radiant1, filename=f"expected_{parameter_label}_radiant1_station{station_id}.json", SCRIPT_DIR=EXPECTED_VALUES_DIR_REF, metadata=metadata_radiant1)
+        # save_values_json(k_values_lt, vrms_mean_lt, vrms_std_lt, filename=f"expected_{parameter_label}_lt_station{station_id}.json", SCRIPT_DIR=EXPECTED_VALUES_DIR_REF, metadata=metadata_lt)
  
-    flag_outliers_force, outlier_details_force = outlier_details(z_score_force, k_values_force, all_channels, run_no_force, event_number_force)
-    flag_outliers_radiant0, outlier_details_radiant0 = outlier_details(z_score_radiant0, k_values_radiant0, all_channels, run_no_radiant0, event_number_radiant0)
-    flag_outliers_radiant1, outlier_details_radiant1 = outlier_details(z_score_radiant1, k_values_radiant1, all_channels, run_no_radiant1, event_number_radiant1)
-    flag_outliers_lt, outlier_details_lt = outlier_details(z_score_lt, k_values_lt, all_channels, run_no_lt, event_number_lt)
+    flag_outliers_force, outlier_details_force = outlier_details(z_score_force, k_values_force, all_channels, run_no_force, event_number_force, trigger_label="FORCE")
+    flag_outliers_radiant0, outlier_details_radiant0 = outlier_details(z_score_radiant0, k_values_radiant0, all_channels, run_no_radiant0, event_number_radiant0, trigger_label="RADIANT0")
+    flag_outliers_radiant1, outlier_details_radiant1 = outlier_details(z_score_radiant1, k_values_radiant1, all_channels, run_no_radiant1, event_number_radiant1, trigger_label="RADIANT1")
+    flag_outliers_lt, outlier_details_lt = outlier_details(z_score_lt, k_values_lt, all_channels, run_no_lt, event_number_lt, trigger_label="LT")
 
-    sva.write_vrms_outlier_details(outlier_details_force, station_id, run_label, trigger_label="FORCE", results_dir=RESULTS_DIR_REF)
-    sva.write_vrms_outlier_details(outlier_details_radiant0, station_id, run_label, trigger_label="RADIANT0", results_dir=RESULTS_DIR_REF)
-    sva.write_vrms_outlier_details(outlier_details_radiant1, station_id, run_label, trigger_label="RADIANT1", results_dir=RESULTS_DIR_REF)  
-    sva.write_vrms_outlier_details(outlier_details_lt, station_id, run_label, trigger_label="LT", results_dir=RESULTS_DIR_REF)
+    k_values_rolling = {int(ch): 4 for ch in all_channels} # Placeholder, as k-values for rolling z-score are not calculated in this script, but could be implemented in the future if needed
+    flag_outliers_force_rolling, outlier_details_force_rolling = outlier_details(z_score_rolling_force, k_values_rolling, all_channels, run_no_force, event_number_force, trigger_label="FORCE_rolling")
 
-    plot_vrms_values_against_time_single_trigger_zscore(times_force, vrms_arr_force, flag_outliers_force, z_score_force, k_values_force, trigger_name="FORCE", channel_list=all_channels, station_id=station_id, run_label=run_label, save_location=PLOTS_DIR_REF)
-    plot_vrms_values_against_time_single_trigger_zscore(times_radiant0, vrms_arr_radiant0, flag_outliers_radiant0, z_score_radiant0, k_values_radiant0, trigger_name="RADIANT0", channel_list=all_channels, station_id=station_id, run_label=run_label, save_location=PLOTS_DIR_REF)
-    plot_vrms_values_against_time_single_trigger_zscore(times_radiant1, vrms_arr_radiant1, flag_outliers_radiant1, z_score_radiant1, k_values_radiant1, trigger_name="RADIANT1", channel_list=all_channels, station_id=station_id, run_label=run_label, save_location=PLOTS_DIR_REF)
-    plot_vrms_values_against_time_single_trigger_zscore(times_lt, vrms_arr_lt, flag_outliers_lt, z_score_lt, k_values_lt, trigger_name="LT", channel_list=all_channels, station_id=station_id, run_label=run_label, save_location=PLOTS_DIR_REF)
+    sva.write_vrms_outlier_details(outlier_details_force, station_id, run_label, trigger_label="FORCE", n_events = len(times_force), results_dir=RESULTS_DIR_REF)
+    sva.write_vrms_outlier_details(outlier_details_radiant0, station_id, run_label, trigger_label="RADIANT0", n_events = len(times_radiant0), results_dir=RESULTS_DIR_REF)
+    sva.write_vrms_outlier_details(outlier_details_radiant1, station_id, run_label, trigger_label="RADIANT1", n_events = len(times_radiant1), results_dir=RESULTS_DIR_REF)  
+    sva.write_vrms_outlier_details(outlier_details_lt, station_id, run_label, trigger_label="LT", n_events = len(times_lt), results_dir=RESULTS_DIR_REF)
+    sva.write_vrms_outlier_details(outlier_details_force_rolling, station_id, run_label, trigger_label="FORCE_rolling", n_events = len(times_force), results_dir=RESULTS_DIR_REF)
+
+    plot_vrms_values_against_time_single_trigger_zscore(times_force, vrms_arr_force, flag_outliers_force, z_score_force, k_values_force, trigger_name="FORCE", channel_list=all_channels, station_id=station_id, run_label=run_label, save_location=PLOTS_DIR_REF, use_monitoring=True)
+    plot_vrms_values_against_time_single_trigger_zscore(times_radiant0, vrms_arr_radiant0, flag_outliers_radiant0, z_score_radiant0, k_values_radiant0, trigger_name="RADIANT0", channel_list=all_channels, station_id=station_id, run_label=run_label, save_location=PLOTS_DIR_REF, use_monitoring=True)
+    plot_vrms_values_against_time_single_trigger_zscore(times_radiant1, vrms_arr_radiant1, flag_outliers_radiant1, z_score_radiant1, k_values_radiant1, trigger_name="RADIANT1", channel_list=all_channels, station_id=station_id, run_label=run_label, save_location=PLOTS_DIR_REF, use_monitoring=True)
+    plot_vrms_values_against_time_single_trigger_zscore(times_lt, vrms_arr_lt, flag_outliers_lt, z_score_lt, k_values_lt, trigger_name="LT", channel_list=all_channels, station_id=station_id, run_label=run_label, save_location=PLOTS_DIR_REF, use_monitoring=True)
+    plot_vrms_values_against_time_single_trigger_zscore(times_force, vrms_arr_force, flag_outliers_force_rolling, z_score_rolling_force, k_values_rolling, trigger_name="FORCE_rolling", channel_list=all_channels, station_id=station_id, run_label=run_label, save_location=PLOTS_DIR_REF, use_monitoring=True)
+    
+    plot_rolling_mean_std(times_force, rolling_mean_force, rolling_std_force, channel_list=all_channels, station_id = station_id, run_label=run_label, trigger_name="FORCE", save_location= PLOTS_DIR_REF, use_monitoring=True)
+    slope_dict_force, intercept_dict_force, r_value_dict_force, p_value_dict_force, std_err_dict_force, intercept_std_err_dict_force = linregress_rolling_mean(times_force, rolling_mean_force, all_channels)
+    plot_rolling_mean_linregress(times_force, rolling_mean_force, all_channels, slope_dict_force, intercept_dict_force, station_id, run_label, trigger_name="FORCE", save_location=PLOTS_DIR_REF, use_monitoring=True)
+    write_linregress_results(slope_dict_force, intercept_dict_force, r_value_dict_force, p_value_dict_force, std_err_dict_force, intercept_std_err_dict_force, station_id, run_label, trigger_name="FORCE", results_dir=RESULTS_DIR_REF)
+    rms_arr_per_run_dict_force = get_rms_per_run(vrms_arr_force, run_no_force)
+    
+    relative_median_shift_results = relative_median_shift(rms_arr_per_run_dict_force, all_channels)
+
+    with open(os.path.join(RESULTS_DIR_REF, f"rms_relative_median_shift_results_force_trigger_station{station_id}_{run_label}.json"), "w") as f:
+        json.dump(relative_median_shift_results, f, indent=4)
+
+    create_heatmap_plot(relative_median_shift_results, label = "Relative Median Shift", save_dir = PLOTS_DIR_REF, channel_list=all_channels, station_id = station_id,matrix_key = "median_shift_matrix", run_label=run_label, cmap="Reds")
+
+    rms_results = decision_metric(outlier_details_force, relative_median_shift_results, n_events_force=len(times_force), channels=all_channels)
+    with open(os.path.join(RESULTS_DIR_REF, f"rms_stability_decision_results_force_trigger_station{station_id}_{run_label}.json"), "w") as f:
+        json.dump(rms_results, f, indent=4)

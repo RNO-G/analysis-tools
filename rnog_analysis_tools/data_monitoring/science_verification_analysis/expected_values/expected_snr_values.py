@@ -4,7 +4,6 @@ import os
 import numpy as np
 from argparse import ArgumentParser
 import logging
-import json
 import sys
 from astropy.time import Time
 
@@ -174,7 +173,7 @@ if __name__ == "__main__":
     flag_outliers_snr = outlier_flag(z_score_arr_log_snr, k_values_log_snr, all_channels)
 
     outlier_details_snr = find_outlier_details(z_score_arr_log_snr, k_values_log_snr, flag_outliers_snr, all_channels, run_no_force, event_number_force)
-    sva.write_snr_outlier_details(outlier_details_snr, station_id, run_label, results_dir=RESULTS_DIR_REF)
+    sva.write_snr_outlier_details(outlier_details_snr, station_id, run_label, n_events_force = len(times_force), results_dir=RESULTS_DIR_REF)
 
     day_interval = choose_day_interval(times)
     plot_snr_against_time(station_id, times_force, snr_arr_force, flag_outliers_snr, z_score_arr_log_snr, k_values_log_snr, all_channels, PLOTS_DIR_REF, run_label, nrows=12, ncols=2, day_interval=day_interval)

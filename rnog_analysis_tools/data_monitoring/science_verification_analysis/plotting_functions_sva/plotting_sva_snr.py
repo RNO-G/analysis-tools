@@ -50,7 +50,7 @@ def plot_snr_against_time(station_id,times,snr_arr,flag,z_log,k_list,channels,sa
         zex = np.clip(zex,0,None)
         sc = ax.scatter(times[flag[ch]], np.log10(snr_arr[ch][flag[ch]]), s=8,c=zex[flag[ch]], cmap="Reds", rasterized=True)
         cax = ax.inset_axes([1.02,0.1,0.05,0.8])
-        plt.colorbar(sc,cax=cax)
+        plt.colorbar(sc,cax=cax, label=r"$|z|-k$")
         ax.grid(alpha=0.4)
         ax.text(0.85, 0.95, f"Ch {ch}", transform = ax.transAxes, ha = "left",va = "top", bbox = dict(boxstyle = "round, pad = 0.25", facecolor = "white", alpha = 0.8))
     
@@ -69,11 +69,11 @@ def plot_snr_against_time(station_id,times,snr_arr,flag,z_log,k_list,channels,sa
 
     if time_span < 1:
         # Use 2h ticks if less than 1 day
-        ticks_ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
+        ticks_ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
         ticks_ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d\n%H:%M", tz=timezone.utc))
     elif time_span < 3:
         # Use 6h ticks if less than 3 days
-        ticks_ax.xaxis.set_major_locator(mdates.HourLocator(interval=12))
+        ticks_ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
         ticks_ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d\n%H:%M", tz=timezone.utc))
     else:
         # Use day ticks otherwise

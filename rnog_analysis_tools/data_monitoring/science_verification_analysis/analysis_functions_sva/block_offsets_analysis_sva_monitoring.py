@@ -4,8 +4,10 @@ from NuRadioReco.utilities import units
 import numpy as np
 
 def get_force_block_offsets_monitoring(block_offset_arr, force_mask):
+    print(f"Original block_offset_arr shape: {block_offset_arr.shape}")
     # block_offset_arr has the shape (n_ch, n_events)
     block_offset_arr_force = block_offset_arr[:, force_mask]
+    print(f"Filtered block_offset_arr_force shape: {block_offset_arr_force.shape}")
     return block_offset_arr_force
 
 def block_offset_statistics_monitoring(block_offset_arr_force, channel_list):
