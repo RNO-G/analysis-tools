@@ -261,8 +261,7 @@ def plot_vrms_values_against_time_single_trigger_zscore(times, vrms_arr, flag, z
 
         if np.any(flag_ch):
             cax = ax.inset_axes([1.02, 0.1, 0.05, 0.8])
-            plt.colorbar(sc, cax=cax, label=r"$
-            -k$")
+            plt.colorbar(sc, cax=cax, label=r"$|z|-k$")
 
         ax.grid(alpha=0.4)
 
@@ -303,8 +302,7 @@ def plot_vrms_values_against_time_single_trigger_zscore(times, vrms_arr, flag, z
             markeredgecolor=red,
             markerfacecolor=red,
             markersize=6,
-            label=r"$
-            >k$"
+            label=r"$|z|>k$"
         )
     ]
 

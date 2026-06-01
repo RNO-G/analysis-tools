@@ -42,7 +42,7 @@ from plotting_functions_sva.plotting_sva_snr import choose_day_interval, plot_sn
 from plotting_functions_sva.plotting_sva_vrms import plot_vrms_values_against_time, plot_vrms_values_against_time_single_trigger_zscore, create_heatmap_plot
 from plotting_functions_sva.plotting_sva_glitch import glitching_violin_plot, choose_bin_size, plot_glitch_q99_over_time
 from plotting_functions_sva.plotting_sva_debug import debug_plot_ratios, debug_plot_snr_distribution, debug_plot_z_score_snr, debug_plot_vrms_distribution
-
+from plotting_functions_sva.plotting_sva_trigger_rate import plot_trigger_rates_over_time, plot_trigger_rate_heatmap
 #### Script directory for json files
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -688,6 +688,8 @@ if __name__ == "__main__":
         max_abs_amplitude_arr = combined_event_info["max_abs_amplitude_arr"][:, valid_times_mask]
         event_number_arr = combined_event_info["event_number_arr"][valid_times_mask]
         run_event_counts = combined_event_info["run_event_counts"] # dict with run number as key and value as another dict with n_events, n_forced_triggers, n_lt_triggers, n_rf0_triggers, n_rf1_triggers for that run
+        run_trigger_rates = combined_event_info["run_trigger_rates"] # dict with run number as key and value as another dict with trigger rates for different trigger types for that run
+        
         failed_run_info = combined_event_info["failed_run_info"] # dict with run number as key and value as reason for failure, only for runs that failed to be read
         failed_run_info = combined_event_info["failed_run_info"] or {}
         failed_runs = list(failed_run_info.keys())
@@ -906,6 +908,11 @@ if __name__ == "__main__":
         block_offset_results_dict = write_block_offset_results(block_offset_stats, station_id, run_label, use_monitoring=use_monitoring)
         plot_block_offsets_violin_before_after_comparison(fit_block_offsets_before, fit_block_offsets_after, all_channels, station_id, run_label, save_location)
 
+    # Trigger rate plots
+    logger.info("Plotting trigger rates over time and heatmap of trigger rates for different trigger types...")
+    plot_trigger_rates_over_time(run_trigger_rates, save_location, station_id, run_label)
+    plot_trigger_rate_heatmap(run_trigger_rates, save_location, station_id, run_label)
+    
     # Debug plots
     if args.debug_plot:   
         debug_plot_ratios(ratio_arr_dict=ratio_arr_dict, channels_order=channels_order, save_location=save_location, station_id=station_id, run_label=run_label, bins=30,)

@@ -96,7 +96,7 @@ def plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr, f
 
     plt.xlabel('Frequency [MHz]')
     plt.xlim(50, 800)
-    #plt.ylim(0, 5)
+    plt.ylim(0, )
     plt.ylabel(f'Amplitude Spectrum [{unit_label}]')
     plt.title(f'Time-Integrated Spectrum of Surface Channels (FORCE Trigger)')
     

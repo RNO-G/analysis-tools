@@ -88,10 +88,14 @@ def save_values_json(k_values_log, mean_values_log, std_values_log, filename, SC
     else:
         metadata = metadata.copy()
     
+    comments = []
     if capped_k_values_high:
-        metadata["comment"] = f"k values above 5 are set to 4: {capped_k_values_high}"
+        comments.append(f"k values above 5 are set to 4: {capped_k_values_high}")
     if capped_k_values_low:
-        metadata["comment"] = f"k values below 3 are set to 3: {capped_k_values_low}"
+        comments.append(f"k values below 3 are set to 3: {capped_k_values_low}")
+    
+    if comments:
+        metadata["comment"] = "\n".join(comments)
     
     output = {
         "metadata": metadata,
@@ -147,7 +151,7 @@ def find_outlier_details(z_score_log, k_values_log, flag, channel_list, run_no, 
 
     # Sanity check:
     if flag.shape[1] != len(run_no) or flag.shape[1] != len(event_number):
-        raise ValueError("Length of run_no and event_number arrays must match the number of events in the z_score_log and flag arrays.")
+        raise ValueError(f"Length of run_no and event_number arrays must match the number of events in the z_score_log and flag arrays. run_no length: {len(run_no)}, event_number length: {len(event_number)}, z_score_log shape: {z_score_log.shape}, flag shape: {flag.shape}")
 
     for ch in channel_list:
         outlier_indices = np.where(flag[ch, :])[0]

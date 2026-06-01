@@ -31,6 +31,8 @@ def choose_day_interval(times):
     
 def plot_snr_against_time(station_id,times,snr_arr,flag,z_log,k_list,channels,save_location,run_label,nrows=12,ncols=2,day_interval=None):
     times = pd.to_datetime(times,utc=True)
+    times = times.tz_convert(None)
+
     channels = list(channels)
     n_channels = len(channels)
 
@@ -45,7 +47,8 @@ def plot_snr_against_time(station_id,times,snr_arr,flag,z_log,k_list,channels,sa
         c = idx%ncols
         ax = axs[r,c]
         good_mask = ~flag[ch]
-        ax.scatter(times[good_mask], np.log10(snr_arr[ch][good_mask]), s=8,alpha=0.25, color="gray", rasterized=True)
+        plot_mask = good_mask & ~pd.isna(times)
+        ax.scatter(times[plot_mask], np.log10(snr_arr[ch][plot_mask]), s=8,alpha=0.25, color="gray", rasterized=True)
         zex = np.abs(z_log[ch]) - k_list[ch]
         zex = np.clip(zex,0,None)
         sc = ax.scatter(times[flag[ch]], np.log10(snr_arr[ch][flag[ch]]), s=8,c=zex[flag[ch]], cmap="Reds", rasterized=True)

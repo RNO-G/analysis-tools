@@ -6,6 +6,7 @@ from argparse import ArgumentParser
 import logging
 import sys
 from astropy.time import Time
+import pandas as pd
 
 SCRIPT_DIR_REF = os.path.dirname(os.path.abspath(__file__))
 EXPECTED_VALUES_DIR_REF = os.path.join(SCRIPT_DIR_REF, "expected_snr")

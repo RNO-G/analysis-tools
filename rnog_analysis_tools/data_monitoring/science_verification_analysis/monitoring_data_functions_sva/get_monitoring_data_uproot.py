@@ -55,6 +55,8 @@ def get_info_from_header_file(header_file):
         header = header_file["header"]
         trigger_time = stack_if_object(header["trigger_time"])
         trigger_time_utc = trigger_time.astype("datetime64[s]")
+        readout_time = stack_if_object(header["readout_time"])
+        duration = np.max(readout_time) - np.min(readout_time) # in seconds
         run_no = stack_if_object(header["run_number"])
         event_number = stack_if_object(header["event_number"])
         station_id = stack_if_object(header["station_number"])
@@ -84,7 +86,9 @@ def get_info_from_header_file(header_file):
             "force_trigger": force_trigger,
             "radiant_trigger": radiant_trigger,
             "lt_trigger": lt_trigger,
-            "which_radiant": which_radiant
+            "which_radiant": which_radiant,
+            "readout_time": readout_time,
+            "duration": duration
         }
     
     except KeyError as e:
@@ -186,6 +190,7 @@ def read_multiple_runs(base_path, station_id, run_numbers):
     total_n_rf1_triggers = 0
 
     run_event_counts = {}
+    run_trigger_rates = {}
 
     spectrum_keys = ["avg_spectrum", "avg_spectrum_force", "avg_spectrum_lt", "avg_spectrum_rf0", "avg_spectrum_rf1"] # (n_ch, n_freqs)
     channel_event_keys = ["rms_arr", "max_abs_amplitude_arr", "glitching_test_statistic_arr", "block_offsets_arr", "snr_arr"] # (n_ch, n_events)
@@ -332,6 +337,8 @@ def read_multiple_runs(base_path, station_id, run_numbers):
         event_info_dict["trigger_time_utc"] = header_info_dict["trigger_time_utc"] # (n_events,)
         event_info_dict["run_no"] = header_info_dict["run_no"] # (n_events,)
         event_info_dict["station_id"] = header_info_dict["station_id"] # (n_events,)
+        event_info_dict["duration"] = header_info_dict["duration"] # a number representing the duration of the run in seconds, calculated as the difference between the max and min readout time in the header file
+        event_info_dict["readout_time"] = header_info_dict["readout_time"] # (n_events,) 
 
         # Add runsummary 
         event_info_dict["avg_spectrum"] = stack_if_object(run_summary_dict["avg_spectrum"]) # (n_ch, n_freqs)
@@ -351,6 +358,21 @@ def read_multiple_runs(base_path, station_id, run_numbers):
         total_n_rf0_triggers += run_summary_dict["n_rf0_triggers"]  
         total_n_rf1_triggers += run_summary_dict["n_rf1_triggers"]
 
+
+        # Calculate trigger rates and add to run_trigger_rates dict for this run
+        trigger_rate_force = run_summary_dict["n_forced_triggers"] / event_info_dict["duration"]
+        trigger_rate_lt = run_summary_dict["n_lt_triggers"] / event_info_dict["duration"]
+        trigger_rate_rf0 = run_summary_dict["n_rf0_triggers"] / event_info_dict["duration"]
+        trigger_rate_rf1 = run_summary_dict["n_rf1_triggers"] / event_info_dict["duration"]
+
+        run_trigger_rates[run_no] = {
+            "force_trigger_rate": trigger_rate_force,
+            "lt_trigger_rate": trigger_rate_lt,
+            "rf0_trigger_rate": trigger_rate_rf0,
+            "rf1_trigger_rate": trigger_rate_rf1,
+            "run_start_time_utc": np.min(event_info_dict["readout_time"].astype("datetime64[s]")), 
+        }
+
         # Add event counts for this run to the run_event_counts dict
         run_event_counts[run_no] = {
             "n_events": run_summary_dict["n_events"],
@@ -360,6 +382,7 @@ def read_multiple_runs(base_path, station_id, run_numbers):
             "n_rf1_triggers": run_summary_dict["n_rf1_triggers"],
         }
 
+        
         if freqs is None:
             freqs = stack_if_object(run_summary_dict["frequencies"]) # (n_freqs,)
 
@@ -383,6 +406,7 @@ def read_multiple_runs(base_path, station_id, run_numbers):
     combined_event_info["total_n_rf0_triggers"] = total_n_rf0_triggers
     combined_event_info["total_n_rf1_triggers"] = total_n_rf1_triggers
     combined_event_info["run_event_counts"] = run_event_counts # dict with run number as key and value as another dict with n_events, n_forced_triggers, n_lt_triggers, n_rf0_triggers, n_rf1_triggers for that run
+    combined_event_info["run_trigger_rates"] = run_trigger_rates # dict with run number as key and value as another dict with force_trigger_rate, lt_trigger_rate, rf0_trigger_rate, rf1_trigger_rate for that run
     combined_event_info["failed_runs"] = failed_runs if len(failed_runs) > 0 else None
     combined_event_info["failed_run_info"] = failed_run_info if len(failed_run_info) > 0 else None
 
