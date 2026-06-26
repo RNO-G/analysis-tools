@@ -37,7 +37,7 @@ from analysis_functions_sva.vrms_stability_analysis_sva import get_rms_per_run, 
 
 
 # Import plotting functions
-from plotting_functions_sva.plotting_sva_spectrum import plot_time_integrated_surface_spectra_unnormalized, plot_time_integrated_surface_spectra_normalized, plot_time_integrated_deep_spectra
+from plotting_functions_sva.plotting_sva_spectrum import plot_time_integrated_surface_spectra_unnormalized, plot_time_integrated_surface_spectra_normalized, plot_time_integrated_deep_spectra, plot_time_integrated_surface_spectra_normalized_example_reference
 from plotting_functions_sva.plotting_sva_snr import choose_day_interval, plot_snr_against_time
 from plotting_functions_sva.plotting_sva_vrms import plot_vrms_values_against_time, plot_vrms_values_against_time_single_trigger_zscore, create_heatmap_plot
 from plotting_functions_sva.plotting_sva_glitch import glitching_violin_plot, choose_bin_size, plot_glitch_q99_over_time
@@ -503,43 +503,55 @@ def write_glitching_results(glitch_info, station_id, run_label):
         f.write("\n".join(lines))
     logger.info(f"Glitching analysis results written to {glitch_results_file}")
 
-def write_block_offset_results(block_offset_stats, station_id, run_label, use_monitoring=False):
+def write_block_offset_results(block_offset_stats, station_id, run_label, ref_block_off_dict, use_monitoring=False):
     block_offset_results_file = os.path.join(RESULTS_DIR, f"block_offset_analysis_results_{station_id}_{run_label}.txt")
     results_dict = {}
     with open(block_offset_results_file, "w") as f:
         for ch in sorted(block_offset_stats.keys()):
             stats = block_offset_stats[ch]
-            if use_monitoring:
+            results = ref_block_off_dict.get(str(ch), {})
+            print(f"stats for channel {ch}: {stats}")
+            if results == {}:
                 f.write(f"Channel {ch:02d}:\n")
-                f.write(f"  Mean block offset: {stats['mean']}, median: {stats['median']}, std: {stats['std']}, IQR: {stats['iqr']}\n")
-                if stats["median"] > block_offset_limits["median"]:
+                f.write("  No reference block offset data available for this channel.\n")
+                results_dict[ch] = "?"
+                continue
+            
+            if use_monitoring:
+                median_ref = results.get("median_adc_offset_counts", None)
+                p99_ref = results.get("p99_adc_offset_counts", None)
+                f.write(f"Channel {ch:02d}:\n")
+                f.write(f"  Mean block offset: {stats['mean']}, median: {stats['median']}, std: {stats['std']}, IQR: {stats['iqr']}, P99: {stats['p99']}\n")
+                if median_ref is not None and stats["median"] > median_ref:
                     results_dict[ch] = "X"
                     logger.warning(f"Channel {ch:02d} has a high median block offset of {stats['median']}, which may indicate a potential issue with the channel.")
-                elif stats["iqr"] > block_offset_limits["iqr"]:
+                elif p99_ref is not None and stats["p99"] > p99_ref:
                     results_dict[ch] = "X"
-                    logger.warning(f"Channel {ch:02d} has a high IQR of block offsets ({stats['iqr']}), indicating significant variability that may need further investigation.")
+                    logger.warning(f"Channel {ch:02d} has a high P99 of block offsets ({stats['p99']}), indicating significant variability that may need further investigation.")
                 else:
                     results_dict[ch] = "OK"
             
             else:
+                median_ref = results.get("median_adc_offset_mv", None)
+                p99_ref = results.get("p99_adc_offset_mv", None)
                 f.write(f"Channel {ch:02d}:\n")
-                f.write(f"  Before removal - mean: {stats['before_mean']} V, median: {stats['before_median']} V, std: {stats['before_std']} V, IQR: {stats['iqr_before']} V\n")
-                f.write(f"  After removal - mean: {stats['after_mean']} V, median: {stats['after_median']} V, std: {stats['after_std']} V, IQR: {stats['iqr_after']} V\n")
+                f.write(f"  Before removal - mean: {stats['before_mean']} V, median: {stats['before_median']} V, std: {stats['before_std']} V, IQR: {stats['iqr_before']} V, P99: {stats['p99_before']} V\n")
+                f.write(f"  After removal - mean: {stats['after_mean']} V, median: {stats['after_median']} V, std: {stats['after_std']} V, IQR: {stats['iqr_after']} V, P99: {stats['p99_after']} V\n")
                 f.write(f"  Removal fraction (based on median): {stats['removal_fraction']*100:.1f}%\n")
-                f.write(f"  IQR reduction fraction: {stats['iqr_reduction_fraction']*100:.1f}%\n")
+                f.write(f"  P99 reduction fraction: {stats['p99_reduction_fraction']*100:.1f}%\n")
 
-                if stats["before_median"] > block_offset_limits["median"]:
+                if median_ref is not None and stats["before_median"] > median_ref:
                     results_dict[ch] = "X"
                     logger.warning(f"Channel {ch:02d} has a high median block offset of {stats['before_median']} V before removal, which may indicate a potential issue with the channel.")
-                elif stats["iqr_before"] > block_offset_limits["iqr"]:
+                elif p99_ref is not None and stats["p99_before"] > p99_ref:
                     results_dict[ch] = "X"
-                    logger.warning(f"Channel {ch:02d} has a high IQR of block offsets ({stats['iqr_before']} V) before removal, indicating significant variability that may need further investigation.")
-                elif stats["after_median"] > block_offset_limits["median"]:
+                    logger.warning(f"Channel {ch:02d} has a high P99 of block offsets ({stats['p99_before']} V) before removal, indicating significant variability that may need further investigation.")
+                elif median_ref is not None and stats["after_median"] > median_ref:
                     results_dict[ch] = "X"
                     logger.warning(f"Channel {ch:02d} has a relatively high median block offset of {stats['after_median']} V after removal, removal was not fully effective.")
-                elif stats["iqr_after"] > block_offset_limits["iqr"]:
+                elif p99_ref is not None and stats["p99_after"] > p99_ref:
                     results_dict[ch] = "X"
-                    logger.warning(f"Channel {ch:02d} has a relatively high IQR of block offsets ({stats['iqr_after']} V) after removal, indicating that there may still be significant variability in block offsets.")
+                    logger.warning(f"Channel {ch:02d} has a relatively high P99 of block offsets ({stats['p99_after']} V) after removal, indicating that there may still be significant variability in block offsets.")
                 else:
                     results_dict[ch] = "OK"
     
@@ -671,7 +683,7 @@ if __name__ == "__main__":
         run_event_counts = None # Not available when reading with dataProviderRNOG, only with monitoring data, used for spectral plotting
         run_no_force = event_info["run"][force_mask]
         event_number_force = event_info["eventNumber"][force_mask]
-        n_event_force = spec_arr_force.shape[1]
+        n_events_force = spec_arr_force.shape[1]
 
     elif use_monitoring == True:
         combined_event_info = read_multiple_runs(base_path = base_data_path, station_id = station_id, run_numbers=run_numbers)
@@ -886,26 +898,29 @@ if __name__ == "__main__":
     
     glitching_violin_plot(glitch_arr, all_channels, station_id, run_label, save_location)
     plot_glitch_q99_over_time(np.array(times), glitch_arr, all_channels, station_id, run_label, save_location)
-
-    # Trigger rate with thresholds plot - Need to be fixed!!!!
-    ####fig_trigger, ax_rate, ax_thr = plot_trigger_rate_with_thresholds(station_id, event_info, downward_channels, upward_channels, run_label, day_interval, bin_width_initial=300, max_bins=800, save_location=save_location)
     
+    ##### Block offsets analysis
+    # Get the reference block offset results for the station
+    ref_block_offset_results_file = os.path.join(REFERENCE_DIR, "expected_block_offsets",f"expected_block_offsets_station{station_id}.json")
+    with open(ref_block_offset_results_file, "r") as f:
+        ref_block_offset_results = json.load(f)
+
     ##### Block offsets - dataProviderRNOG
     if use_monitoring:
         logger.info("Starting block offset analysis (monitoring.root), results are not used to determine channel health, see warnings in the log file for channels with potential block offset issues. The block offsets are then removed.")
         block_offset_arr_force = get_force_block_offsets_monitoring(block_offsets_arr, force_mask)
         block_offset_stats = block_offset_statistics_monitoring(block_offset_arr_force=block_offset_arr_force, channel_list=all_channels)
         
-        block_offset_results_dict = write_block_offset_results(block_offset_stats, station_id, run_label, use_monitoring=use_monitoring)
+        block_offset_results_dict = write_block_offset_results(block_offset_stats, station_id, run_label, ref_block_off_dict = ref_block_offset_results, use_monitoring=use_monitoring)
         plot_block_offsets_violin_monitoring(block_offset_arr_force, all_channels, station_id, run_label, save_location)
-    
+        
     else:
         logger.info("Starting block offset analysis (dataProviderRNOG), results are not used to determine channel health, see warnings in the log file for channels with potential block offset issues. The block offsets are then removed.")
         fit_block_offsets_before = get_block_offsets_before_removal(block_offsets_arr, event_info, all_channels)
         fit_block_offsets_after = get_block_offsets_after_removal(trace_arr, event_info, all_channels, sampling_rate=sr)
 
         block_offset_stats = block_offset_statistics(fit_block_offsets_before, fit_block_offsets_after, all_channels)
-        block_offset_results_dict = write_block_offset_results(block_offset_stats, station_id, run_label, use_monitoring=use_monitoring)
+        block_offset_results_dict = write_block_offset_results(block_offset_stats, station_id, run_label, ref_block_off_dict = ref_block_offset_results, use_monitoring=use_monitoring)
         plot_block_offsets_violin_before_after_comparison(fit_block_offsets_before, fit_block_offsets_after, all_channels, station_id, run_label, save_location)
 
     # Trigger rate plots

@@ -5,17 +5,13 @@ from scipy.stats import binomtest
 def binomtest_glitch_fraction(glitch_arr, channel_list, config_glitching=None):
     '''Perform binomial test on glitch fractions for each channel (with p0=0.1 - can be adjusted from the config_glitching.py).'''
     if config_glitching is None:
-        alpha = 0.01
-        pvalue = 0.1
-        ci_level = 0.99
-        strong_ci_threshold = 0.3
-        moderate_ci_threshold = 0.2
-    else:
-        alpha = config_glitching.get("alpha", 0.01)
-        pvalue = config_glitching.get("pvalue", 0.1)
-        ci_level = config_glitching.get("ci_level", 0.99)
-        strong_ci_threshold = config_glitching.get("strong_ci_threshold", 0.3)
-        moderate_ci_threshold = config_glitching.get("moderate_ci_threshold", 0.2)
+        config_glitching = {}
+    
+    alpha = config_glitching.get("alpha", 0.01)
+    pvalue = config_glitching.get("pvalue", 0.1)
+    ci_level = config_glitching.get("ci_level", 0.99)
+    strong_ci_threshold = config_glitching.get("strong_ci_threshold", 0.3)
+    moderate_ci_threshold = config_glitching.get("moderate_ci_threshold", 0.2)
     
     glitch_info = {}
     n_events = glitch_arr.shape[1]

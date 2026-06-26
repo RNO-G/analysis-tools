@@ -19,6 +19,8 @@ def block_offset_statistics_monitoring(block_offset_arr_force, channel_list):
             "median": np.nanmedian(offsets_ch),
             "std": np.nanstd(offsets_ch),
             "iqr": np.nanpercentile(offsets_ch, 75) - np.nanpercentile(offsets_ch, 25),
+            "p99": np.nanpercentile(offsets_ch, 99),
+            "p95": np.nanpercentile(offsets_ch, 95),
         }
     return stats
 
