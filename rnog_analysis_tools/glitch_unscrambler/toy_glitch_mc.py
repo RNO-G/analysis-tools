@@ -54,8 +54,6 @@ _blk = np.arange(_NBLOCKS)
 _src_blk = np.where(_blk % 2 == 0, (_blk + 2) % _NBLOCKS, (_blk - 2) % _NBLOCKS)
 _SCRAMBLE_PERM = (_src_blk[:, None] * BLOCK_SIZE + np.arange(BLOCK_SIZE)).ravel()
 
-print(np.unique(_SCRAMBLE_PERM, return_counts=True))
-
 def get_deep_response(freqs):
     """Complex response H(f) of an RNO-G deep channel at the given freqs."""
     amp = ac.load_amp_response(amp_type='deep_impulse')
