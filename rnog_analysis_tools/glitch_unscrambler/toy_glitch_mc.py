@@ -41,10 +41,12 @@ from NuRadioReco.utilities import units, fft
 SAMPLING_RATE = 3.2 * units.GHz       # RNO-G LAB4D deep-channel sampling rate
 N_SAMPLES     = 2048                  # samples per readout window (LAB4D buffer)
 BLOCK_SIZE    = 64                   # LAB4D sampling-block size (the real value)
-N_EVENTS      = 20000                 # toy-MC traces to average over
+BLOCK_SIZE2   = BLOCK_SIZE * 2
+N_EVENTS      = 10000                 # toy-MC traces to average over
 NOISE_VRMS    = 10 * units.micro * units.volt  # thermal noise V_rms at antenna
 SEED          = 42
-p             = 0.1
+p             = 1
+STRENGTH_BLOCKS = 0.2
 
 # The real glitch is the exact inverse of the detector's `unscramble`: each
 # 64-sample block is shifted cyclically by +/-2 positions (even blocks +2, odd
@@ -99,6 +101,10 @@ def main():
     for _ in range(N_EVENTS):
         clean = generate_noise_trace(noise_adder, response)
 
+        if STRENGTH_BLOCKS:
+            blocks = rng.normal(0, np.std(clean) * STRENGTH_BLOCKS, int(N_SAMPLES // BLOCK_SIZE2))
+            clean += np.repeat(blocks, BLOCK_SIZE2)
+
         is_glitched = rng.random() < p
         glitched = glitch(clean) if is_glitched else clean
 
@@ -151,7 +157,7 @@ def main():
     ax.grid(alpha=0.3)
     fig.tight_layout()
 
-    out = f"toy_glitch_mc_{p}.png"
+    out = f"toy_glitch_mc_{p}_blockoffsets_{STRENGTH_BLOCKS}.png"
     fig.savefig(out, dpi=130)
     print(f"saved {out}")
 
