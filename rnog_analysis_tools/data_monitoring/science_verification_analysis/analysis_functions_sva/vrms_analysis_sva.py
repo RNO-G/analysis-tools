@@ -159,44 +159,41 @@ def report_vrms_characteristics(modality_dict, tail_dict, channel_list, report_c
         if np.isnan(full_skew):
             tail_label = "no significant tails"
             tail_frac = None
-            if tail_frac is not None:
-                tail_label += f" (fraction: {tail_frac:.3f})"
-            continue
-
-        if not np.isnan(skew_trim_h):
-            dskew_h = full_skew - skew_trim_h
         else:
-            dskew_h = 0
-        if not np.isnan(skew_trim_l):
-            dskew_l = full_skew - skew_trim_l
-        else:
-            dskew_l = 0
-
-        if 0 < high_frac < rare_max_high_frac and full_skew > extreme_skew and dskew_h > delta_skew_min:
-            tail_label = "rare high extremes"
-            tail_frac = high_frac
-
-        elif 0 < low_frac < rare_max_low_frac and full_skew < -extreme_skew and dskew_l < -delta_skew_min:
-            tail_label = "rare low extremes"
-            tail_frac = low_frac
-
-        elif full_skew > strong_skew:
-            if high_frac < mod_max_high_frac:
-                tail_label = "moderate high skew"
+            if not np.isnan(skew_trim_h):
+                dskew_h = full_skew - skew_trim_h
             else:
-                tail_label = "bulk high skew"
-            tail_frac = high_frac
-
-        elif full_skew < -strong_skew:
-            if low_frac < mod_max_low_frac:
-                tail_label = "moderate low skew"
+                dskew_h = 0
+            if not np.isnan(skew_trim_l):
+                dskew_l = full_skew - skew_trim_l
             else:
-                tail_label = "bulk low skew"
-            tail_frac = low_frac
+                dskew_l = 0
 
-        else:
-            tail_label = "no significant tails"
-            tail_frac = None
+            if 0 < high_frac < rare_max_high_frac and full_skew > extreme_skew and dskew_h > delta_skew_min:
+                tail_label = "rare high extremes"
+                tail_frac = high_frac
+
+            elif 0 < low_frac < rare_max_low_frac and full_skew < -extreme_skew and dskew_l < -delta_skew_min:
+                tail_label = "rare low extremes"
+                tail_frac = low_frac
+
+            elif full_skew > strong_skew:
+                if high_frac < mod_max_high_frac:
+                    tail_label = "moderate high skew"
+                else:
+                    tail_label = "bulk high skew"
+                tail_frac = high_frac
+
+            elif full_skew < -strong_skew:
+                if low_frac < mod_max_low_frac:
+                    tail_label = "moderate low skew"
+                else:
+                    tail_label = "bulk low skew"
+                tail_frac = low_frac
+
+            else:
+                tail_label = "no significant tails"
+                tail_frac = None
 
         # output summary
         if tail_frac is not None:

@@ -6,9 +6,10 @@ from argparse import ArgumentParser
 import json
 import sys
 import pandas as pd
+from NuRadioReco.utilities import units
 
 SCRIPT_DIR_REF = os.path.dirname(os.path.abspath(__file__))
-PARENT_DIR = os.path.dirname(SCRIPT_DIR_REF)
+PARENT_DIR = os.path.dirname(os.path.dirname(SCRIPT_DIR_REF))
 CONFIG_DIR = os.path.join(PARENT_DIR, "config_files_sva")
 sys.path.insert(0, PARENT_DIR)
 
@@ -43,10 +44,12 @@ def setup_logging(station_id, run_label):
 
 if __name__ == "__main__":
 
-    argparser = ArgumentParser(description="RNO-G Science Verification Analysis - Expected RMS values.")
+    argparser = ArgumentParser(description="RNO-G Science Verification Analysis - Expected RMS values. !!!! Outdated !!!!")
     
     argparser.add_argument("-st", "--station_id", type=int, required=True, help="Station to analyze, e.g --station_id 14")
+    argparser.add_argument("-b", "--backend", type=str, default="pyroot", help="!!! Only needed for method 'dataProviderRNOG' !!!. Backend to use for reading data, should be either pyroot or uproot (default: pyroot), e.g. --backend pyroot or --backend uproot")
     argparser.add_argument("-ex", "--exclude-runs", nargs="+", type=int, default=[], metavar="RUN", help="Run number(s) to exclude, e.g. --exclude-runs 1005 1010")
+    argparser.add_argument("--sampling_rate", type=str, default= "after_2024", choices=["before_2024", "after_2024"], help="!!! Only needed for method 'monitoring' !!!. Sampling rate to use, choices are 'before_2024' (3.2 GHz) and 'after_2024' (2.4 GHz), default is 'after_2024'.")
     argparser.add_argument("--save-values", action="store_true", help="Whether to save the calculated reference values as JSON files in the script directory, e.g. --save-values")
     
     run_selection = argparser.add_mutually_exclusive_group(required=True)
@@ -61,13 +64,19 @@ if __name__ == "__main__":
 
     base_data_path = "/pnfs/ifh.de/acs/radio/diskonly/data/inbox/"
 
-    use_monitoring = True
-
-
-    parameter_label = "rms"
-    logger.info("Using monitoring method to read data")
+    use_monitoring = False
+    parameter_label = "vrms"
+    logger.info("Using dataProviderRNOG method to read data")
 
     station_id = args.station_id
+    backend = args.backend
+    if backend not in ["pyroot", "uproot"]:
+        raise ValueError("Backend should be either 'pyroot' or 'uproot'")
+    
+    sampling_rate_choice = args.sampling_rate
+    sampling_rate = {"after_2024": 2.4*units.GHz,
+                 "before_2024": 3.2*units.GHz}
+    sr = sampling_rate[sampling_rate_choice]
    
     if args.runs:
         run_numbers = args.runs
@@ -117,46 +126,28 @@ if __name__ == "__main__":
 
     all_channels = config["all_channels"]
     
-    combined_event_info = read_multiple_runs(base_path = base_data_path, station_id = station_id, run_numbers=run_numbers)
-    rms_arr = combined_event_info["rms_arr"]
-    trigger_type_arr = combined_event_info["triggerType"]
-    times = combined_event_info["trigger_time_utc"]
-    run_no = combined_event_info["run_no"]
-    event_number_arr = combined_event_info["event_number_arr"]
-    failed_run_info = combined_event_info["failed_run_info"] or {}
-    failed_runs = list(failed_run_info.keys())
-
-    valid_times_mask = ~pd.isna(times)
-    if np.any(~valid_times_mask):
-        invalid_runs = np.unique(run_no[~valid_times_mask])
-        logger.warning(f"Found {np.sum(~valid_times_mask)} invalid timestamps in runs {invalid_runs}. These events will be skipped in the analysis.")
-        times = times[valid_times_mask]
-        rms_arr = rms_arr[:, valid_times_mask]
-        trigger_type_arr = trigger_type_arr[valid_times_mask]
-        run_no = run_no[valid_times_mask]
-        event_number_arr = event_number_arr[valid_times_mask]
-
-        for invalid_run in invalid_runs:
-            failed_run_info[invalid_run] = "Some events have been skipped in the analysis due to invalid timestamps, check logs for details"
+    spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info, glitch_arr, block_offsets_arr = read_rnog_data(station_id, run_numbers, backend=backend, sampling_rate=sr) 
     
-    force_mask = choose_trigger_type_header(trigger_type_arr, "FORCE")
-    lt_mask = choose_trigger_type_header(trigger_type_arr, "LT")
-    radiant0_mask = choose_trigger_type_header(trigger_type_arr, "RADIANT0")
-    radiant1_mask = choose_trigger_type_header(trigger_type_arr, "RADIANT1")
+    force_mask = choose_trigger_type(event_info, "FORCE")
+    lt_mask = choose_trigger_type(event_info, "LT")
+    radiant0_mask = choose_trigger_type(event_info, "RADIANT0")
+    radiant1_mask = choose_trigger_type(event_info, "RADIANT1")
+
+    times = np.array(times)
+    run_no_force = event_info["run"][force_mask]
+    event_number_force = event_info["eventNumber"][force_mask]
+
+    run_no_radiant0 = event_info["run"][radiant0_mask]
+    event_number_radiant0 = event_info["eventNumber"][radiant0_mask]
+
+    run_no_radiant1 = event_info["run"][radiant1_mask]
+    event_number_radiant1 = event_info["eventNumber"][radiant1_mask]
+
+    run_no_lt = event_info["run"][lt_mask]
+    event_number_lt = event_info["eventNumber"][lt_mask]
+    failed_run_info = {} 
     
-    run_no_force = run_no[force_mask]
-    event_number_force = event_number_arr[force_mask]
-
-    run_no_radiant0 = run_no[radiant0_mask]
-    event_number_radiant0 = event_number_arr[radiant0_mask]
-
-    run_no_radiant1 = run_no[radiant1_mask]
-    event_number_radiant1 = event_number_arr[radiant1_mask]
-
-    run_no_lt = run_no[lt_mask]
-    event_number_lt = event_number_arr[lt_mask]
-
-    vrms_arr,vrms_arr_force, vrms_arr_radiant0, vrms_arr_radiant1, vrms_arr_lt = get_rms_per_trigger_monitoring(rms_arr=rms_arr, force_mask=force_mask, lt_mask=lt_mask, radiant0_mask=radiant0_mask, radiant1_mask=radiant1_mask)
+    vrms_arr, vrms_arr_force, vrms_arr_radiant0, vrms_arr_radiant1, vrms_arr_lt = calculate_vrms(trace_arr, event_info)
 
     excluded_runs = args.exclude_runs.copy() if args.exclude_runs else []
     if excluded_runs:
@@ -198,7 +189,7 @@ if __name__ == "__main__":
     write_vrms_outlier_details(outlier_details_lt, station_id, run_label, trigger_label="LT", n_events = len(times_lt), results_dir=RESULTS_DIR_REF)
     write_vrms_outlier_details(outlier_details_force_rolling, station_id, run_label, trigger_label="FORCE_rolling", n_events = len(times_force), results_dir=RESULTS_DIR_REF)
 
-    plot_vrms_values_against_time_single_trigger_zscore(times_force, vrms_arr_force, flag_outliers_force, z_score_force, k_values_force, trigger_name="FORCE", channel_list=all_channels, station_id=station_id, run_label=run_label, save_location=PLOTS_DIR_REF, use_monitoring=True)   
+    plot_vrms_values_against_time_single_trigger_zscore(times_force, vrms_arr_force, flag_outliers_force, z_score_force, k_values_force, trigger_name="FORCE", channel_list=all_channels, station_id=station_id, run_label=run_label, save_location=PLOTS_DIR_REF, use_monitoring=True)
     rms_arr_per_run_dict_force = get_rms_per_run(vrms_arr_force, run_no_force)
     
     relative_median_shift_results = relative_median_shift(rms_arr_per_run_dict_force, all_channels)

@@ -5,6 +5,36 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+#### Normalize surface channel spectra to the average of the down channels in the reference frequency band (500-650 MHz)
+def normalize_channels(spec_arr, frequencies, down_channels, up_channels, normalization_band = None):
+    '''Normalize all surface channel spectra to the average of the down channels in the reference frequency band. The reference band is 500-650 MHz by default'''
+    
+    if normalization_band is None:
+        normalization_band = {}
+    
+    f_low = normalization_band.get("freq_min", 500)*units.MHz
+    f_high= normalization_band.get("freq_max", 650)*units.MHz
+
+    # spec_arr shape: (n_channels, n_events, n_freqs)
+    freq_mask = (frequencies >= f_low) & (frequencies <= f_high)
+    spec_arr = np.copy(spec_arr)
+
+    # Use only down channels to define the reference
+    down = spec_arr[down_channels]
+    down_band_avg = np.mean(down[:, :, freq_mask], axis=2)  # (n_down, n_events)
+    ref_band_avg = np.mean(down_band_avg, axis=0)           # (n_events,)
+
+    all_surface_channels = up_channels + down_channels
+    all_surface_spectra = spec_arr[all_surface_channels]
+
+    ch_band_avg = np.mean(all_surface_spectra[:, :, freq_mask], axis=2)  # (n_ch, n_events)
+    scale_factors = ref_band_avg[np.newaxis, :] / ch_band_avg    # (n_ch, n_events)
+
+    all_surface_spectra_norm = all_surface_spectra * scale_factors[:, :, np.newaxis]
+    spec_arr[all_surface_channels] = all_surface_spectra_norm
+
+    return spec_arr, scale_factors
+
 def find_amplitude_ratio_in_band(freqs, norm_spec_arr, upward_channels, downward_channels, reference_channels, freq_min, freq_max):
     '''Find normalized amplitude ratio of upward vs downward channels in a given frequency band. This will be replaced by lab measurements in the future.'''
     freq_mask = (freqs >= freq_min) & (freqs <= freq_max)
@@ -32,8 +62,8 @@ def find_amplitude_ratio_in_band_specific_bkg(freqs, norm_spec_arr, upward_chann
 
     ratio_arr_dict = {}
     for band_name, band_info in bandconfig.items():
-        freq_min = band_info["freq_min"]
-        freq_max = band_info["freq_max"]
+        freq_min = band_info["freq_min"]*units.MHz
+        freq_max = band_info["freq_max"]*units.MHz
         reference_channels = band_info["reference_channels"]
 
         ratio_arr, _ = find_amplitude_ratio_in_band(freqs, norm_spec_arr, upward_channels, downward_channels, reference_channels, freq_min, freq_max)
@@ -53,7 +83,9 @@ def excess_info_from_ratio(ratio_arr, band_name, alpha, ci_thresholds, use_monit
         std_log_ratio = np.std(log_ratio)
         n_runs = len(log_ratio)
 
-        no_excess, weak_excess, moderate_excess = log_ratio_thresholds
+        no_excess = log_ratio_thresholds.get("no_excess", 0.08)
+        weak_excess = log_ratio_thresholds.get("weak_excess", 0.12)
+        moderate_excess = log_ratio_thresholds.get("moderate_excess", 0.16)
 
         if median_log_ratio < no_excess:
             validation = "NO EXCESS"

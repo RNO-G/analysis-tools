@@ -1,0 +1,1 @@
+The scripts in this directory can be used to calculate the expected values, using dataProviderRNOG() module to read data. The current version uses monitoring.root data. These scripts won't be updated anymore.

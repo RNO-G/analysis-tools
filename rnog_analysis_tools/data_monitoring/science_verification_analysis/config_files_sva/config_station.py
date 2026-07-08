@@ -33,5 +33,3 @@ def get_station_config(station_id):
         cfg.update(adjustments)
     return cfg
 
-sampling_rate = {"after_2024": 2.4*units.GHz,
-                 "before_2024": 3.2*units.GHz}

@@ -7,6 +7,7 @@ import logging
 import sys
 from astropy.time import Time
 import pandas as pd
+from NuRadioReco.utilities import units
 import json
 
 SCRIPT_DIR_REF = os.path.dirname(os.path.abspath(__file__))
@@ -19,7 +20,7 @@ os.makedirs(LOGS_DIR_REF, exist_ok=True)
 os.makedirs(RESULTS_DIR_REF, exist_ok=True)
 os.makedirs(EXPECTED_VALUES_DIR_REF, exist_ok=True)
 
-PARENT_DIR = os.path.dirname(SCRIPT_DIR_REF)
+PARENT_DIR = os.path.dirname(os.path.dirname(SCRIPT_DIR_REF))
 CONFIG_DIR = os.path.join(PARENT_DIR, "config_files_sva")
 sys.path.insert(0, PARENT_DIR)
 
@@ -74,10 +75,12 @@ def metadata_dict(station_id, first_run, last_run, times, trigger_type="FORCE", 
 
 if __name__ == "__main__":
 
-    argparser = ArgumentParser(description="RNO-G Science Verification Analysis - Expected SNR values.")
-       
+    argparser = ArgumentParser(description="RNO-G Science Verification Analysis - Expected SNR values. !!!! Outdated !!!!")
+    
     argparser.add_argument("-st", "--station_id", type=int, required=True, help="Station to analyze, e.g --station_id 14")
+    argparser.add_argument("-b", "--backend", type=str, default="pyroot", help="!!! Only needed for method 'monitoring' !!!. Backend to use for reading data, should be either pyroot or uproot (default: pyroot), e.g. --backend pyroot or --backend uproot")
     argparser.add_argument("-ex", "--exclude-runs", nargs="+", type=int, default=[], metavar="RUN", help="Run number(s) to exclude, e.g. --exclude-runs 1005 1010")
+    argparser.add_argument("--sampling_rate", type=str, default= "after_2024", choices=["before_2024", "after_2024"], help="!!! Only needed for method 'monitoring' !!!. Sampling rate to use, choices are 'before_2024' (3.2 GHz) and 'after_2024' (2.4 GHz), default is 'after_2024'.")
     argparser.add_argument("--save-values", action="store_true", help="Whether to save the calculated reference values as JSON files in the script directory, e.g. --save-values")
     
     run_selection = argparser.add_mutually_exclusive_group(required=True)
@@ -92,9 +95,17 @@ if __name__ == "__main__":
 
     base_data_path = "/pnfs/ifh.de/acs/radio/diskonly/data/inbox/"
 
-    logger.info("Using monitoring method to read data")
+    logger.info("Using dataProviderRNOG method to read data")
 
     station_id = args.station_id
+    backend = args.backend
+    if backend not in ["pyroot", "uproot"]:
+        raise ValueError("Backend should be either 'pyroot' or 'uproot'")
+    
+    sampling_rate_choice = args.sampling_rate
+    sampling_rate = {"after_2024": 2.4*units.GHz,
+                 "before_2024": 3.2*units.GHz}
+    sr = sampling_rate[sampling_rate_choice]
    
     if args.runs:
         run_numbers = args.runs
@@ -134,18 +145,12 @@ if __name__ == "__main__":
 
     all_channels = config["all_channels"]
     
-    combined_event_info = read_multiple_runs(base_path = base_data_path, station_id = station_id, run_numbers=run_numbers)
-    snr_arr = combined_event_info["snr_arr"] 
-    trigger_type_arr = combined_event_info["triggerType"]
-    times = combined_event_info["trigger_time_utc"]
-    run_no = combined_event_info["run_no"]
-    event_number_arr = combined_event_info["event_number_arr"]
-    failed_run_info = combined_event_info["failed_run_info"] or {}
-    failed_runs = list(failed_run_info.keys())
-
-    force_mask = choose_trigger_type_header(trigger_type_arr, "FORCE")
-    run_no_force = run_no[force_mask]
-    event_number_force = event_number_arr[force_mask]
+    spec_arr, trace_arr, times_trace_arr, snr_arr, run_no, times, freqs, event_info, glitch_arr, block_offsets_arr = read_rnog_data(station_id, run_numbers, backend=backend, sampling_rate=sr) 
+    force_mask = choose_trigger_type(event_info, "FORCE")
+    times = np.array(times)
+    run_no_force = event_info["run"][force_mask]
+    event_number_force = event_info["eventNumber"][force_mask]
+    failed_run_info = {} 
     
     excluded_runs = args.exclude_runs.copy() if args.exclude_runs else []
     if excluded_runs:

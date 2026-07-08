@@ -32,96 +32,97 @@ def relative_median_shift(rms_arr_per_run_dict, channel_list):
         median_shift_results[int(ch)] = {"medians": [float(m) for m in medians], "median_shift_matrix": median_shift_matrix.tolist()}
     return median_shift_results
 
-def wasserstein_distance_per_run(rms_arr_per_run_dict, channel_list):
-    '''Calculate Wasserstein distance between RMS distributions of different runs for each channel.'''
-    run_nos = sorted(rms_arr_per_run_dict.keys())
-    wasserstein_results = {}
+### Currently not used, but can be used for future analysis if needed
+# def wasserstein_distance_per_run(rms_arr_per_run_dict, channel_list):
+#     '''Calculate Wasserstein distance between RMS distributions of different runs for each channel.'''
+#     run_nos = sorted(rms_arr_per_run_dict.keys())
+#     wasserstein_results = {}
 
-    for ch in channel_list:
-        distance_matrix = np.full((len(run_nos), len(run_nos)), np.nan)
-        np.fill_diagonal(distance_matrix, 0)
-        for i in range(len(run_nos)):
-            for j in range(i+1, len(run_nos)):
-                dist = wasserstein_distance(rms_arr_per_run_dict[run_nos[i]][ch], rms_arr_per_run_dict[run_nos[j]][ch])
-                distance_matrix[i, j] = float(dist)
-                distance_matrix[j, i] = float(dist)
-        wasserstein_results[int(ch)] = {"distance_matrix": distance_matrix.tolist()}
+#     for ch in channel_list:
+#         distance_matrix = np.full((len(run_nos), len(run_nos)), np.nan)
+#         np.fill_diagonal(distance_matrix, 0)
+#         for i in range(len(run_nos)):
+#             for j in range(i+1, len(run_nos)):
+#                 dist = wasserstein_distance(rms_arr_per_run_dict[run_nos[i]][ch], rms_arr_per_run_dict[run_nos[j]][ch])
+#                 distance_matrix[i, j] = float(dist)
+#                 distance_matrix[j, i] = float(dist)
+#         wasserstein_results[int(ch)] = {"distance_matrix": distance_matrix.tolist()}
 
-    return wasserstein_results
+#     return wasserstein_results
 
-def wasserstein_statistics(wasserstein_results, channel_list):
-    '''Calculate statistics of Wasserstein distances for each channel.'''
-    wasserstein_stats = {}
-    for ch in channel_list:
-        distance_matrix = np.array(wasserstein_results[int(ch)]["distance_matrix"])
-        overall_max_distance = np.nanmax(distance_matrix)
-        diagonal_matrix = np.diag(distance_matrix, k=1)
+# def wasserstein_statistics(wasserstein_results, channel_list):
+#     '''Calculate statistics of Wasserstein distances for each channel.'''
+#     wasserstein_stats = {}
+#     for ch in channel_list:
+#         distance_matrix = np.array(wasserstein_results[int(ch)]["distance_matrix"])
+#         overall_max_distance = np.nanmax(distance_matrix)
+#         diagonal_matrix = np.diag(distance_matrix, k=1)
         
-        median_global_distance = np.nanmedian(distance_matrix)
-        median_diagonal_distance = np.nanmedian(diagonal_matrix)
-        mean_global_distance = np.nanmean(distance_matrix)
-        mean_diagonal_distance = np.nanmean(diagonal_matrix)
-        max_global_distance = np.nanmax(distance_matrix)
-        max_diagonal_distance = np.nanmax(diagonal_matrix)
-        std_global_distance = np.nanstd(distance_matrix)
-        std_diagonal_distance = np.nanstd(diagonal_matrix)
-        roughness = std_global_distance / mean_global_distance if mean_global_distance != 0 else np.nan
-        wasserstein_stats[int(ch)] = {
-            "overall_max_distance": float(overall_max_distance),
-            "median_global_distance": float(median_global_distance),
-            "median_diagonal_distance": float(median_diagonal_distance),
-            "mean_global_distance": float(mean_global_distance),
-            "mean_diagonal_distance": float(mean_diagonal_distance),
-            "max_global_distance": float(max_global_distance),
-            "max_diagonal_distance": float(max_diagonal_distance),
-            "std_global_distance": float(std_global_distance),
-            "std_diagonal_distance": float(std_diagonal_distance),
-            "max_ratio": float(max_global_distance / max_diagonal_distance) if max_diagonal_distance != 0 else np.nan,
-            "roughness": float(roughness),
-            "fluctuation_index": float(std_global_distance / mean_global_distance) if mean_global_distance != 0 else np.nan ,
-            "jump_ratio": float(max_diagonal_distance / median_diagonal_distance) if median_diagonal_distance != 0 else np.nan,
-            "global_p90": float(np.nanpercentile(distance_matrix, 90)),
-            "diagonal_p90": float(np.nanpercentile(diagonal_matrix, 90)),
-        }
-    return wasserstein_stats
+#         median_global_distance = np.nanmedian(distance_matrix)
+#         median_diagonal_distance = np.nanmedian(diagonal_matrix)
+#         mean_global_distance = np.nanmean(distance_matrix)
+#         mean_diagonal_distance = np.nanmean(diagonal_matrix)
+#         max_global_distance = np.nanmax(distance_matrix)
+#         max_diagonal_distance = np.nanmax(diagonal_matrix)
+#         std_global_distance = np.nanstd(distance_matrix)
+#         std_diagonal_distance = np.nanstd(diagonal_matrix)
+#         roughness = std_global_distance / mean_global_distance if mean_global_distance != 0 else np.nan
+#         wasserstein_stats[int(ch)] = {
+#             "overall_max_distance": float(overall_max_distance),
+#             "median_global_distance": float(median_global_distance),
+#             "median_diagonal_distance": float(median_diagonal_distance),
+#             "mean_global_distance": float(mean_global_distance),
+#             "mean_diagonal_distance": float(mean_diagonal_distance),
+#             "max_global_distance": float(max_global_distance),
+#             "max_diagonal_distance": float(max_diagonal_distance),
+#             "std_global_distance": float(std_global_distance),
+#             "std_diagonal_distance": float(std_diagonal_distance),
+#             "max_ratio": float(max_global_distance / max_diagonal_distance) if max_diagonal_distance != 0 else np.nan,
+#             "roughness": float(roughness),
+#             "fluctuation_index": float(std_global_distance / mean_global_distance) if mean_global_distance != 0 else np.nan ,
+#             "jump_ratio": float(max_diagonal_distance / median_diagonal_distance) if median_diagonal_distance != 0 else np.nan,
+#             "global_p90": float(np.nanpercentile(distance_matrix, 90)),
+#             "diagonal_p90": float(np.nanpercentile(diagonal_matrix, 90)),
+#         }
+#     return wasserstein_stats
 
-def linregress_rolling_mean(times, rolling_mean, channel_list):
-    '''Perform linear regression on the rolling mean values over time for each channel.'''
-    slope_dict = {}
-    intercept_dict = {}
-    r_value_dict = {}
-    p_value_dict = {}
-    std_err_dict = {}
-    intercept_std_err_dict = {}
+# def linregress_rolling_mean(times, rolling_mean, channel_list):
+#     '''Perform linear regression on the rolling mean values over time for each channel.'''
+#     slope_dict = {}
+#     intercept_dict = {}
+#     r_value_dict = {}
+#     p_value_dict = {}
+#     std_err_dict = {}
+#     intercept_std_err_dict = {}
 
-    times = times.astype("datetime64[s]").astype(np.float64) # Convert to seconds since epoch for linregress
-    times_rel = times - times.min() # Use relative time to avoid numerical issues with large values
-    times_rel_hours = times_rel / 3600 # Convert to hours for better interpretability of slope
+#     times = times.astype("datetime64[s]").astype(np.float64) # Convert to seconds since epoch for linregress
+#     times_rel = times - times.min() # Use relative time to avoid numerical issues with large values
+#     times_rel_hours = times_rel / 3600 # Convert to hours for better interpretability of slope
 
-    for ch in channel_list:
-        res = linregress(times_rel_hours[1:], rolling_mean[ch][1:])
-        slope_dict[ch] = res.slope
-        intercept_dict[ch] = res.intercept
-        r_value_dict[ch] = res.rvalue
-        p_value_dict[ch] = res.pvalue
-        std_err_dict[ch] = res.stderr
-        intercept_std_err_dict[ch] = res.intercept_stderr
+#     for ch in channel_list:
+#         res = linregress(times_rel_hours[1:], rolling_mean[ch][1:])
+#         slope_dict[ch] = res.slope
+#         intercept_dict[ch] = res.intercept
+#         r_value_dict[ch] = res.rvalue
+#         p_value_dict[ch] = res.pvalue
+#         std_err_dict[ch] = res.stderr
+#         intercept_std_err_dict[ch] = res.intercept_stderr
 
-    return slope_dict, intercept_dict, r_value_dict, p_value_dict, std_err_dict, intercept_std_err_dict
+#     return slope_dict, intercept_dict, r_value_dict, p_value_dict, std_err_dict, intercept_std_err_dict
 
-def write_linregress_results(slope_dict, intercept_dict, r_value_dict, p_value_dict, std_err_dict, intercept_std_err_dict, station_id, run_label, trigger_name, results_dir):
-    '''Write linear regression results to a txt file.'''   
-    results_file = os.path.join(results_dir, f"linear_regression_results_rolling_mean_{trigger_name}_station{station_id}_{run_label}.txt")
-    with open(results_file, "w") as f:
-        f.write(f"Linear Regression Results for Rolling Mean of Vrms - Station {station_id}, Trigger {trigger_name}, Runs {run_label}\n")
-        for ch in slope_dict.keys():
-            f.write(f"Channel {ch}:\n")
-            f.write(f"  Slope: {slope_dict[ch]} ± {std_err_dict[ch]} ADC/hours \n")
-            f.write(f"  Intercept: {intercept_dict[ch]} ± {intercept_std_err_dict[ch]} ADC\n")
-            f.write(f"  R-value: {r_value_dict[ch]}\n")
-            f.write(f"  R-squared: {r_value_dict[ch]**2}\n")
-            f.write(f"  P-value: {p_value_dict[ch]}\n\n")
-    logger.info(f"Linear regression results saved to {results_file}")
+# def write_linregress_results(slope_dict, intercept_dict, r_value_dict, p_value_dict, std_err_dict, intercept_std_err_dict, station_id, run_label, trigger_name, results_dir):
+#     '''Write linear regression results to a txt file.'''   
+#     results_file = os.path.join(results_dir, f"linear_regression_results_rolling_mean_{trigger_name}_station{station_id}_{run_label}.txt")
+#     with open(results_file, "w") as f:
+#         f.write(f"Linear Regression Results for Rolling Mean of Vrms - Station {station_id}, Trigger {trigger_name}, Runs {run_label}\n")
+#         for ch in slope_dict.keys():
+#             f.write(f"Channel {ch}:\n")
+#             f.write(f"  Slope: {slope_dict[ch]} ± {std_err_dict[ch]} ADC/hours \n")
+#             f.write(f"  Intercept: {intercept_dict[ch]} ± {intercept_std_err_dict[ch]} ADC\n")
+#             f.write(f"  R-value: {r_value_dict[ch]}\n")
+#             f.write(f"  R-squared: {r_value_dict[ch]**2}\n")
+#             f.write(f"  P-value: {p_value_dict[ch]}\n\n")
+#     logger.info(f"Linear regression results saved to {results_file}")
 
 def decision_metric(outlier_details, relative_median_shift, n_events_force, channels):
     rms_results = {}
