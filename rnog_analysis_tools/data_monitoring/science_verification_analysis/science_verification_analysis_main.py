@@ -29,7 +29,7 @@ from analysis_functions_sva.block_offsets_analysis_sva_monitoring import get_for
 from analysis_functions_sva.vrms_stability_analysis_sva import get_rms_per_run, relative_median_shift, decision_metric
 
 # Import helper functions
-from helper_functions.output_writer import write_failed_runs_to_csv, write_spectral_results, write_snr_outlier_details, write_vrms_outlier_details, write_vrms_modality_results, write_glitching_results, write_block_offset_results, create_result_csv_file 
+from helper_functions.output_writer import write_failed_runs_to_csv, write_spectral_results, write_snr_outlier_details, write_vrms_outlier_details, write_vrms_modality_results, write_glitching_results, write_block_offset_results, create_result_csv_file
 from helper_functions.read_rnog_runtable import read_rnog_runtable
 from helper_functions.config_helper import get_station_config
 
@@ -77,15 +77,14 @@ def setup_logging(station_id, run_label):
     )
 
     logger.info(f"Logging to {log_file}")
-    
+
 if __name__ == "__main__":
 
     argparser = ArgumentParser(description="RNO-G Science Verification Analysis - extracting data from monitoring.root files")
-    
+
     argparser.add_argument("-st", "--station_id", type=int, required=True, help="Station to analyze, e.g --station_id 14")
     argparser.add_argument("-sl", "--save_location", type=str, default=PLOTS_DIR, help="Location to save the output plots (default: plots directory under script directory), e.g. --save_location /path/to/save/plots")
-    argparser.add_argument("-ex", "--exclude-runs", nargs="+", type=int, default=[], metavar="RUN", help="Run number(s) to exclude, e.g. --exclude-runs 1005 1010")
-    argparser.add_argument("--debug_plot", action="store_true", help="If set, will create debug plots.")
+    argparser.add_argument("--data_dir", type=str, default=None, help="Data directory. Expecting runs be be under `args.data_dir/stationXX/runYYYYYY`.")
 
     run_selection = argparser.add_mutually_exclusive_group(required=True)
     run_selection.add_argument("--runs", nargs="+", type=int, metavar="RUN_NUMBERS",
@@ -95,14 +94,17 @@ if __name__ == "__main__":
     run_selection.add_argument("--time_range", nargs=2, type=str, metavar=("START_DATE", "END_DATE"),
                             help="Date range to analyze (inclusive). Provide start and end dates separated by a space in YYYY-MM-DD format, e.g. --time_range 2024-07-15 2024-09-30")
 
+    argparser.add_argument("-ex", "--exclude-runs", nargs="+", type=int, default=[], metavar="RUN", help="Run number(s) to exclude, e.g. --exclude-runs 1005 1010")
+    argparser.add_argument("--debug_plot", action="store_true", help="If set, will create debug plots.")
+
 
     args = argparser.parse_args()
 
-    use_monitoring = True 
+    use_monitoring = True
     rms_label = "rms"
 
     station_id = args.station_id
-   
+
     if args.runs:
         run_numbers = args.runs
     elif args.run_range:
@@ -113,7 +115,7 @@ if __name__ == "__main__":
         run_numbers = runtable["run"].tolist()
     else:
         raise ValueError("No run selection provided")
-    
+
     # Exclude specified runs
     if args.exclude_runs:
         exclude_set = set(args.exclude_runs)
@@ -131,7 +133,7 @@ if __name__ == "__main__":
     # Start logging
     setup_logging(station_id, run_label)
     logger.info(f"Starting analysis for station {station_id}, runs: {run_numbers} using the monitoring.root files.")
-    
+
     # Set the plotting style
     set_plot_style()
 
@@ -143,11 +145,11 @@ if __name__ == "__main__":
     station_config_json = os.path.join(CONFIG_DIR, "config_station.json")
     with open(station_config_json, "r") as f:
         station_config_data = json.load(f)
-    
+
     default_station_config = station_config_data.get("default_config", {})
     station_specific_adjustments = station_config_data.get("station_specific_adjustments", {})
     config = get_station_config(station_id, default_station_config, station_specific_adjustments)
-    
+
     surface_channels = config["surface_channels"]
     deep_channels = config["deep_channels"]
     upward_channels = config["upward_channels"]
@@ -159,8 +161,11 @@ if __name__ == "__main__":
     reference_channels_galaxy = config["reference_channels_galaxy"]
     reference_channels = config["reference_channels"]
 
-    base_data_path = "/pnfs/ifh.de/acs/radio/diskonly/data/inbox/"
-    
+    if args.data_dir is not None:
+        base_data_path = args.data_dir
+    else:
+        base_data_path = "/pnfs/ifh.de/acs/radio/diskonly/data/inbox/"
+
     # Load event information from the combined_event_info dictionary:
     combined_event_info = read_multiple_runs(base_path = base_data_path, station_id = station_id, run_numbers=run_numbers)
 
@@ -168,15 +173,15 @@ if __name__ == "__main__":
     valid_times_mask = ~pd.isna(times)
     times = times[valid_times_mask]
     invalid_runs = np.unique(combined_event_info["run_no"][~valid_times_mask])
-    
+
     run_no = combined_event_info["run_no"][valid_times_mask]
     trigger_type_arr = combined_event_info["triggerType"][valid_times_mask]
-    
+
     max_abs_amplitude_arr = combined_event_info["max_abs_amplitude_arr"][:, valid_times_mask]
     event_number_arr = combined_event_info["event_number_arr"][valid_times_mask]
     run_event_counts = combined_event_info["run_event_counts"] # dict with run number as key and value as another dict with n_events, n_forced_triggers, n_lt_triggers, n_rf0_triggers, n_rf1_triggers for that run
     run_trigger_rates = combined_event_info["run_trigger_rates"] # dict with run number as key and value as another dict with trigger rates for different trigger types for that run
-    
+
     failed_run_info = combined_event_info["failed_run_info"] or {} # dict with run number as key and value as reason for failure, only for runs that failed to be read
     failed_runs = list(failed_run_info.keys())
 
@@ -184,7 +189,7 @@ if __name__ == "__main__":
         logger.warning(f"Some events have invalid trigger times and will be excluded from the analysis, events belong to the runs: {list(map(int, invalid_runs))}. ")
         for invalid_run in invalid_runs:
             failed_run_info[int(invalid_run)] = "Some events have been skipped in the analysis due to invalid timestamps, check logs for details"
-    
+
 
     excluded_runs = args.exclude_runs.copy() if args.exclude_runs else []
     if excluded_runs:
@@ -194,7 +199,7 @@ if __name__ == "__main__":
 
     if failed_run_info:
         write_failed_runs_to_csv(station_id, failed_run_info, run_label, results_dir=RESULTS_DIR)
-    
+
     n_events_force = combined_event_info["total_n_force_triggers"]
     n_lt_events = combined_event_info["total_n_lt_triggers"]
     n_radiant0_events = combined_event_info["total_n_rf0_triggers"]
@@ -227,7 +232,7 @@ if __name__ == "__main__":
 
     # Normalize the spectra for the FORCE trigger events
     norm_spec_arr_force, scale_factors_force = normalize_channels(spec_arr_force, freqs, downward_channels, upward_channels, normalization_band = normalization_band)
-    
+
     # Masks for different trigger types
     force_mask = choose_trigger_type_header(trigger_type_arr, "FORCE")
     lt_mask = choose_trigger_type_header(trigger_type_arr, "LT")
@@ -256,7 +261,7 @@ if __name__ == "__main__":
         else:
             logger.error(f"Unknown band name {band_name} in SPECTRAL_BANDS config")
             raise ValueError(f"Unknown band name {band_name} in SPECTRAL_BANDS config")
-        
+
     logger.debug(f"Band configuration for spectral analysis: {band_config}")
 
     ratio_arr_dict = find_amplitude_ratio_in_band_specific_bkg(freqs, norm_spec_arr_force, upward_channels, downward_channels, **band_config)
@@ -283,14 +288,14 @@ if __name__ == "__main__":
         all_validation_results[ch] = validation_results
 
         # Write detailed spectral results to text file for each channel
-        write_spectral_results(ch, excess_info_results, station_id, run_label, results_dir=RESULTS_DIR, log_once=(ch==surface_channels[-1]), reset_file=(ch==surface_channels[0]))    
+        write_spectral_results(ch, excess_info_results, station_id, run_label, results_dir=RESULTS_DIR, log_once=(ch==surface_channels[-1]), reset_file=(ch==surface_channels[0]))
 
     # Surface spectrum
     plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_force, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label="force", use_monitoring = use_monitoring, run_event_counts = run_event_counts)
     plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_lt, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label="lt", use_monitoring = use_monitoring, run_event_counts = run_event_counts)
     plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_radiant0, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label="radiant0", use_monitoring = use_monitoring, run_event_counts = run_event_counts)
     plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_radiant1, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label="radiant1", use_monitoring = use_monitoring, run_event_counts = run_event_counts)
-    
+
     # Normalized surface spectrum - only force
     plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr_force, freqs, upward_channels, downward_channels, save_location, run_label, use_monitoring = use_monitoring, run_event_counts = run_event_counts)
 
@@ -299,7 +304,7 @@ if __name__ == "__main__":
     plot_time_integrated_deep_spectra(station_id, spec_arr_lt, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label="lt", use_monitoring = use_monitoring, run_event_counts = run_event_counts)
     plot_time_integrated_deep_spectra(station_id, spec_arr_radiant0, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label="radiant0", use_monitoring = use_monitoring, run_event_counts = run_event_counts)
     plot_time_integrated_deep_spectra(station_id, spec_arr_radiant1, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label="radiant1", use_monitoring = use_monitoring, run_event_counts = run_event_counts)
-    
+
     ###### SNR analysis
     logger.info("Starting SNR analysis for FORCE trigger events...")
     snr_arr_force = snr_arr[:, force_mask]
@@ -317,7 +322,7 @@ if __name__ == "__main__":
 
     day_interval = choose_day_interval(times)
     plot_snr_against_time(station_id, times_force, snr_arr_force, flag_outliers_snr, z_score_arr_log_snr, k_values_log_snr, all_channels, save_location, run_label, nrows=12, ncols=2, day_interval=day_interval)
-       
+
     ##### Vrms analysis
     logger.info("Starting Vrms analysis for monitoring data...")
     # Still named as Vrms for consistency but they are actually RMS values
@@ -325,16 +330,16 @@ if __name__ == "__main__":
 
     logger.info(f"Number of RADIANT0 trigger events: {len(vrms_arr_radiant0[1])}, Number of RADIANT1 trigger events: {len(vrms_arr_radiant1[1])}, Number of LT trigger events: {len(vrms_arr_lt[1])}")
     logger.info(f"Calculating RMS (for monitoring.root) or Vrms (for dataProviderRNOG) modality and tail characteristics for each trigger type...")
-    
+
     # Load the configuration parameters for the RMS analysis from the JSON file
     rms_config_json = os.path.join(CONFIG_DIR, "config_rms.json")
     with open(rms_config_json, "r") as f:
         rms_config_dict = json.load(f)
-    
+
     kde_modality_function_parameters = rms_config_dict["kde_modality_function_parameters"]
     skewness_function_parameters = rms_config_dict["skewness_function_parameters"]
     report_vrms_function_parameters = rms_config_dict["report_vrms_function_parameters"]
-    
+
     modality_dict_force = kde_modality(vrms_arr_force, all_channels, kde_modality_config=kde_modality_function_parameters)
     tail_dict_force = tail_fraction_and_trimmed_skew_two_sided(vrms_arr_force, all_channels, skewness_config=skewness_function_parameters)
     if len(vrms_arr_force[1]) < 100:
@@ -357,7 +362,7 @@ if __name__ == "__main__":
     tail_dict_lt = tail_fraction_and_trimmed_skew_two_sided(vrms_arr_lt, all_channels, skewness_config=skewness_function_parameters)
     if len(vrms_arr_lt[1]) < 100:
         logger.warning(f"LT trigger has less than 100 valid RMS entries ({len(vrms_arr_lt[1])}). Results for the Vrms statistics may be unreliable.")
-    
+
     modality_lt, tail_label_lt = report_vrms_characteristics(modality_dict_lt, tail_dict_lt, all_channels, report_config=report_vrms_function_parameters)
     plot_vrms_values_against_time(times, vrms_arr, all_channels, station_id, run_label, save_location, force_mask, radiant0_mask, radiant1_mask, lt_mask, n_rows=12, n_cols=2, day_interval=day_interval, use_monitoring=use_monitoring)
     plot_vrms_values_against_time_per_trigger(times, vrms_arr, all_channels, station_id, run_label, save_location, force_mask, radiant0_mask, radiant1_mask, lt_mask, n_rows=12, n_cols=2, day_interval=day_interval, use_monitoring=use_monitoring)
@@ -373,7 +378,7 @@ if __name__ == "__main__":
     debug_plot_vrms_distribution(vrms_arr_radiant0, modality_dict_radiant0, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="RADIANT0", save_location=save_location, n_rows=12, n_cols=2, use_monitoring=use_monitoring)
     debug_plot_vrms_distribution(vrms_arr_radiant1, modality_dict_radiant1, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="RADIANT1", save_location=save_location, n_rows=12, n_cols=2, use_monitoring=use_monitoring)
     debug_plot_vrms_distribution(vrms_arr_lt, modality_dict_lt, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="LT", save_location=save_location, n_rows=12, n_cols=2, use_monitoring=use_monitoring)
-    
+
     # Vrms stability
     reference_filename_rms = f"expected_{rms_label}/expected_{rms_label}_station{station_id}.json"
     vrms_k_values, vrms_ref_mean, vrms_ref_std = load_values_json(REFERENCE_DIR, reference_filename_rms)
@@ -391,8 +396,8 @@ if __name__ == "__main__":
     rms_results = decision_metric(outlier_details_vrms_force, relative_median_shift_results, n_events_force=n_events_force, channels=all_channels)
     with open(os.path.join(RESULTS_DIR, f"rms_stability_decision_results_force_trigger_station{station_id}_{run_label}.json"), "w") as f:
         json.dump(rms_results, f, indent=4)
-    
-    ##### Glitching analysis - Same for both monitoring and dataProviderRNOG 
+
+    ##### Glitching analysis - Same for both monitoring and dataProviderRNOG
     logger.info("Starting glitching analysis...")
 
     # Load the configuration parameters for the glitching analysis from the JSON file
@@ -401,13 +406,13 @@ if __name__ == "__main__":
         glitching_config_dict = json.load(f)
 
     config_glitching = glitching_config_dict["config_glitching_values"]
-    
+
     glitch_info = binomtest_glitch_fraction(glitch_arr, all_channels, config_glitching=config_glitching)
     write_glitching_results(glitch_info, station_id, run_label, all_channels, results_dir = RESULTS_DIR)
-    
+
     glitching_violin_plot(glitch_arr, all_channels, station_id, run_label, save_location)
     plot_glitch_q99_over_time(np.array(times), glitch_arr, all_channels, station_id, run_label, save_location)
-    
+
     ##### Block offsets analysis
     # Get the reference block offset results for the station
     ref_block_offset_results_file = os.path.join(REFERENCE_DIR, "expected_block_offsets",f"expected_block_offsets_station{station_id}.json")
@@ -418,7 +423,7 @@ if __name__ == "__main__":
     logger.info("Starting block offset analysis (monitoring.root), results are not used to determine channel health, see warnings in the log file for channels with potential block offset issues. The block offsets are then removed.")
     block_offset_arr_force = get_force_block_offsets_monitoring(block_offsets_arr, force_mask)
     block_offset_stats = block_offset_statistics_monitoring(block_offset_arr_force=block_offset_arr_force, channel_list=all_channels)
-    
+
     block_offset_results_dict = write_block_offset_results(block_offset_stats, station_id, run_label, ref_block_off_dict = ref_block_offset_results, results_dir = RESULTS_DIR, use_monitoring=use_monitoring)
     plot_block_offsets_violin_monitoring(block_offset_arr_force, all_channels, station_id, run_label, save_location)
 
@@ -426,18 +431,18 @@ if __name__ == "__main__":
     logger.info("Plotting trigger rates over time and heatmap of trigger rates for different trigger types...")
     plot_trigger_rates_over_time(run_trigger_rates, save_location, station_id, run_label)
     plot_trigger_rate_heatmap(run_trigger_rates, save_location, station_id, run_label)
-    
+
     # Debug plots
-    if args.debug_plot:   
+    if args.debug_plot:
         debug_plot_ratios(ratio_arr_dict=ratio_arr_dict, channels_order=channels_order, save_location=save_location, station_id=station_id, run_label=run_label, bins=30,)
         debug_plot_snr_distribution(log_snr_arr, channel_list=all_channels, save_location=save_location, station_id=station_id, run_label=run_label, bins=30)
-        debug_plot_z_score_snr(z_score_arr_log_snr, channel_list=all_channels, save_location=save_location, station_id=station_id, run_label=run_label, bins=30)  
+        debug_plot_z_score_snr(z_score_arr_log_snr, channel_list=all_channels, save_location=save_location, station_id=station_id, run_label=run_label, bins=30)
 
         plot_snr_against_time_per_trigger(station_id, times_radiant0, snr_arr_radiant0, all_channels, save_location, run_label, nrows=12, ncols=2, day_interval=day_interval, color = "tab:orange", triggerlabel="RADIANT0")
         plot_snr_against_time_per_trigger(station_id, times_radiant1, snr_arr_radiant1, all_channels, save_location, run_label, nrows=12, ncols=2, day_interval=day_interval, color = "tab:green", triggerlabel="RADIANT1")
         plot_snr_against_time_per_trigger(station_id, times_lt, snr_arr_lt, all_channels, save_location, run_label, nrows=12, ncols=2, day_interval=day_interval, color = "tab:red", triggerlabel="LT")
- 
-        
+
+
     # Create summary CSV file
     create_result_csv_file(
         station_id,
@@ -459,4 +464,3 @@ if __name__ == "__main__":
         CSV_DIR,
         rms_label
     )
-    
