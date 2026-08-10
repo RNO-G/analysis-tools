@@ -35,6 +35,70 @@ def normalize_channels(spec_arr, frequencies, down_channels, up_channels, normal
 
     return spec_arr, scale_factors
 
+def normalize_channels_new(
+    spec_arr,
+    frequencies,
+    down_channels,
+    up_channels,
+    normalization_band=None
+):
+    '''
+    Normalize each surface-channel spectrum by its own average value within
+    the reference frequency band.
+
+    The normalization is performed separately for each channel and event.
+    By default, the reference frequency band is 500-650 MHz.
+    '''
+
+    if normalization_band is None:
+        normalization_band = {}
+
+    f_low = normalization_band.get("freq_min", 300) * units.MHz
+    f_high = normalization_band.get("freq_max", 350) * units.MHz
+
+    # spec_arr shape: (n_channels, n_events, n_freqs)
+    freq_mask = (frequencies >= f_low) & (frequencies <= f_high)
+
+    if not np.any(freq_mask):
+        raise ValueError(
+            f"No frequency bins found between "
+            f"{f_low / units.MHz:.1f} and {f_high / units.MHz:.1f} MHz"
+        )
+
+    spec_arr = np.copy(spec_arr)
+
+    all_surface_channels = np.concatenate((
+        np.asarray(up_channels, dtype=int),
+        np.asarray(down_channels, dtype=int)
+    ))
+
+    all_surface_spectra = spec_arr[all_surface_channels]
+
+    # Average each channel separately within the normalization band
+    ch_band_avg = np.nanmean(
+        all_surface_spectra[:, :, freq_mask],
+        axis=2
+    )  # (n_surface_channels, n_events)
+
+    scale_factors = np.full_like(ch_band_avg, np.nan, dtype=float)
+
+    valid = np.isfinite(ch_band_avg) & (ch_band_avg != 0)
+
+    np.divide(
+        1.0,
+        ch_band_avg,
+        out=scale_factors,
+        where=valid
+    )
+
+    all_surface_spectra_norm = (
+        all_surface_spectra * scale_factors[:, :, np.newaxis]
+    )
+
+    spec_arr[all_surface_channels] = all_surface_spectra_norm
+
+    return spec_arr, scale_factors
+
 def find_amplitude_ratio_in_band(freqs, norm_spec_arr, upward_channels, downward_channels, reference_channels, freq_min, freq_max):
     '''Find normalized amplitude ratio of upward vs downward channels in a given frequency band. This will be replaced by lab measurements in the future.'''
     freq_mask = (freqs >= freq_min) & (freqs <= freq_max)

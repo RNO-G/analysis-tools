@@ -11,8 +11,8 @@
     "ci_threshold_spec" : [0.6, 0.75],
 
     "normalization_band" : {
-        "freq_min": 500, 
-        "freq_max": 650
+        "freq_min": 300, 
+        "freq_max": 350
     },
     
     "log_ratio_thresholds_spec" : {
