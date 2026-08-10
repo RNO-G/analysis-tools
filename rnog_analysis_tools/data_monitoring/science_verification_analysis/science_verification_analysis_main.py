@@ -21,7 +21,7 @@ from config_files_sva.config_plotting import set_plot_style
 
 # Import analysis functions
 from monitoring_data_functions_sva.get_monitoring_data_uproot import choose_trigger_type_header, read_multiple_runs
-from analysis_functions_sva.spectral_analysis_sva import normalize_channels, find_amplitude_ratio_in_band, find_amplitude_ratio_in_band_specific_bkg, excess_info_from_ratio, excess_info_from_ratio_specific_bkg, validate_excess_in_bands
+from analysis_functions_sva.spectral_analysis_sva import normalize_channels, normalize_channels_new, find_amplitude_ratio_in_band, find_amplitude_ratio_in_band_specific_bkg, excess_info_from_ratio, excess_info_from_ratio_specific_bkg, validate_excess_in_bands
 from analysis_functions_sva.z_score_analysis_sva import calculate_statistics_log_paramater, calculate_z_score_parameter, symmetry_metrics_channel_z_score, symmetry_metrics_z_score, load_values_json, outlier_flag, find_outlier_details, calculate_expected_values_per_trigger, outlier_details
 from analysis_functions_sva.vrms_analysis_sva import calculate_vrms, kde_modality, tail_fraction_and_trimmed_skew_two_sided, report_vrms_characteristics, get_rms_per_trigger_monitoring
 from analysis_functions_sva.glitching_analysis_sva import binomtest_glitch_fraction
@@ -29,16 +29,16 @@ from analysis_functions_sva.block_offsets_analysis_sva_monitoring import get_for
 from analysis_functions_sva.vrms_stability_analysis_sva import get_rms_per_run, relative_median_shift, decision_metric
 
 # Import helper functions
-from helper_functions.output_writer import write_failed_runs_to_csv, write_spectral_results, write_snr_outlier_details, write_vrms_outlier_details, write_vrms_modality_results, write_glitching_results, write_block_offset_results, create_result_csv_file 
+from helper_functions.output_writer import write_failed_runs_to_csv, write_spectral_results, write_snr_outlier_details, write_vrms_outlier_details, write_vrms_modality_results, write_glitching_results, write_block_offset_results, create_result_csv_file, create_result_csv_file_didaq
 from helper_functions.read_rnog_runtable import read_rnog_runtable
 from helper_functions.config_helper import get_station_config
 
 # Import plotting functions
-from plotting_functions_sva.plotting_sva_spectrum import plot_time_integrated_surface_spectra_unnormalized, plot_time_integrated_surface_spectra_normalized, plot_time_integrated_deep_spectra
-from plotting_functions_sva.plotting_sva_snr import choose_day_interval, plot_snr_against_time, plot_snr_against_time_per_trigger
-from plotting_functions_sva.plotting_sva_vrms import plot_vrms_values_against_time, plot_vrms_values_against_time_single_trigger_zscore, create_heatmap_plot, plot_vrms_values_against_time_per_trigger
+from plotting_functions_sva.plotting_sva_spectrum import plot_time_integrated_surface_spectra_unnormalized, plot_time_integrated_surface_spectra_normalized, plot_time_integrated_deep_spectra, plot_time_integrated_surface_spectra_normalized_example_reference
+from plotting_functions_sva.plotting_sva_snr import plot_snr_against_time_single_channel, choose_day_interval, plot_snr_against_time, plot_snr_against_time_per_trigger
+from plotting_functions_sva.plotting_sva_vrms import plot_vrms_values_against_time_single_channel_zscore, plot_vrms_values_against_time, plot_vrms_values_against_time_single_trigger_zscore, create_heatmap_plot, plot_vrms_values_against_time_per_trigger
 from plotting_functions_sva.plotting_sva_glitch import glitching_violin_plot, choose_bin_size, plot_glitch_q99_over_time
-from plotting_functions_sva.plotting_sva_debug import debug_plot_ratios, debug_plot_snr_distribution, debug_plot_z_score_snr, debug_plot_vrms_distribution
+from plotting_functions_sva.plotting_sva_debug import debug_plot_vrms_distribution_single_channel, debug_plot_ratios, debug_plot_snr_distribution, debug_plot_z_score_snr, debug_plot_vrms_distribution, debug_plot_ratios_just_galaxy
 from plotting_functions_sva.plotting_sva_trigger_rate import plot_trigger_rates_over_time, plot_trigger_rate_heatmap
 
 #### Script directory for json files
@@ -86,6 +86,7 @@ if __name__ == "__main__":
     argparser.add_argument("-sl", "--save_location", type=str, default=PLOTS_DIR, help="Location to save the output plots (default: plots directory under script directory), e.g. --save_location /path/to/save/plots")
     argparser.add_argument("-ex", "--exclude-runs", nargs="+", type=int, default=[], metavar="RUN", help="Run number(s) to exclude, e.g. --exclude-runs 1005 1010")
     argparser.add_argument("--debug_plot", action="store_true", help="If set, will create debug plots.")
+    argparser.add_argument("--base_data_path", type = str, default = "/pnfs/ifh.de/acs/radio/diskonly/data/inbox/", help="Base path to the data directory (default: /pnfs/ifh.de/acs/radio/diskonly/data/inbox/), e.g. --base_data_path /path/to/data")
 
     run_selection = argparser.add_mutually_exclusive_group(required=True)
     run_selection.add_argument("--runs", nargs="+", type=int, metavar="RUN_NUMBERS",
@@ -128,6 +129,8 @@ if __name__ == "__main__":
     else:
         run_label = f"runs_{first_run}_{last_run}"
 
+    base_data_path = args.base_data_path
+
     # Start logging
     setup_logging(station_id, run_label)
     logger.info(f"Starting analysis for station {station_id}, runs: {run_numbers} using the monitoring.root files.")
@@ -159,10 +162,21 @@ if __name__ == "__main__":
     reference_channels_galaxy = config["reference_channels_galaxy"]
     reference_channels = config["reference_channels"]
 
-    base_data_path = "/pnfs/ifh.de/acs/radio/diskonly/data/inbox/"
+    # Choose RADIANT or DIDAQ based on the station configuration
+    digitizer_type = config["daq_type"]
+    if digitizer_type not in ["radiant", "didaq"]:
+        logger.error(f"Invalid daq_type {digitizer_type}. Must be either 'radiant' or 'didaq'.")
+        raise ValueError(f"Invalid daq_type {digitizer_type}. Must be either 'radiant' or 'didaq'. Please check the station configuration in config_station.json.")
+
+    if digitizer_type == "radiant":
+        logger.info(f"Using RADIANT digitizer type for station {station_id}. Triggers are FORCE, LT, RADIANT0, RADIANT1.")
+    elif digitizer_type == "didaq":
+        logger.info(f"Using DIDAQ digitizer type for station {station_id}. Triggers are FORCE, DIDAQ_DEEP_PHASED, DIDAQ_SURF_UP, DIDAQ_SURF_DOWN.")
+
+    # base_data_path = "/cephfs/users/zeynepsu/analysis-tools/rnog_analysis_tools/data_monitoring/science_verification_analysis/new_station_first_runs"
     
     # Load event information from the combined_event_info dictionary:
-    combined_event_info = read_multiple_runs(base_path = base_data_path, station_id = station_id, run_numbers=run_numbers)
+    combined_event_info = read_multiple_runs(base_path = base_data_path, station_id = station_id, run_numbers=run_numbers, daq_type=digitizer_type)
 
     times = combined_event_info["trigger_time_utc"]
     valid_times_mask = ~pd.isna(times)
@@ -226,7 +240,7 @@ if __name__ == "__main__":
     log_ratio_thresholds_spec = spectral_analysis_config_dict["log_ratio_thresholds_spec"]
 
     # Normalize the spectra for the FORCE trigger events
-    norm_spec_arr_force, scale_factors_force = normalize_channels(spec_arr_force, freqs, downward_channels, upward_channels, normalization_band = normalization_band)
+    norm_spec_arr_force, scale_factors_force = normalize_channels_new(spec_arr_force, freqs, downward_channels, upward_channels, normalization_band = normalization_band)
     
     # Masks for different trigger types
     force_mask = choose_trigger_type_header(trigger_type_arr, "FORCE")
@@ -374,7 +388,7 @@ if __name__ == "__main__":
     debug_plot_vrms_distribution(vrms_arr_radiant1, modality_dict_radiant1, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="RADIANT1", save_location=save_location, n_rows=12, n_cols=2, use_monitoring=use_monitoring)
     debug_plot_vrms_distribution(vrms_arr_lt, modality_dict_lt, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label="LT", save_location=save_location, n_rows=12, n_cols=2, use_monitoring=use_monitoring)
     
-    # Vrms stability
+    ## Vrms stability
     reference_filename_rms = f"expected_{rms_label}/expected_{rms_label}_station{station_id}.json"
     vrms_k_values, vrms_ref_mean, vrms_ref_std = load_values_json(REFERENCE_DIR, reference_filename_rms)
     z_score_arr_vrms_force = calculate_z_score_parameter(vrms_arr_force, vrms_ref_mean, vrms_ref_std, all_channels)
@@ -392,35 +406,37 @@ if __name__ == "__main__":
     with open(os.path.join(RESULTS_DIR, f"rms_stability_decision_results_force_trigger_station{station_id}_{run_label}.json"), "w") as f:
         json.dump(rms_results, f, indent=4)
     
-    ##### Glitching analysis - Same for both monitoring and dataProviderRNOG 
-    logger.info("Starting glitching analysis...")
+    ##### Glitching and block offset analysis - only for RADIANT digitizer type
+    if digitizer_type:
+        ##### Glitching analysis
+        logger.info("Starting glitching analysis...")
 
-    # Load the configuration parameters for the glitching analysis from the JSON file
-    glitching_config_json = os.path.join(CONFIG_DIR, "config_glitching.json")
-    with open(glitching_config_json, "r") as f:
-        glitching_config_dict = json.load(f)
+        # Load the configuration parameters for the glitching analysis from the JSON file
+        glitching_config_json = os.path.join(CONFIG_DIR, "config_glitching.json")
+        with open(glitching_config_json, "r") as f:
+            glitching_config_dict = json.load(f)
 
-    config_glitching = glitching_config_dict["config_glitching_values"]
-    
-    glitch_info = binomtest_glitch_fraction(glitch_arr, all_channels, config_glitching=config_glitching)
-    write_glitching_results(glitch_info, station_id, run_label, all_channels, results_dir = RESULTS_DIR)
-    
-    glitching_violin_plot(glitch_arr, all_channels, station_id, run_label, save_location)
-    plot_glitch_q99_over_time(np.array(times), glitch_arr, all_channels, station_id, run_label, save_location)
-    
-    ##### Block offsets analysis
-    # Get the reference block offset results for the station
-    ref_block_offset_results_file = os.path.join(REFERENCE_DIR, "expected_block_offsets",f"expected_block_offsets_station{station_id}.json")
-    with open(ref_block_offset_results_file, "r") as f:
-        ref_block_offset_results = json.load(f)
+        config_glitching = glitching_config_dict["config_glitching_values"]
+        
+        glitch_info = binomtest_glitch_fraction(glitch_arr, all_channels, config_glitching=config_glitching)
+        write_glitching_results(glitch_info, station_id, run_label, all_channels, results_dir = RESULTS_DIR)
+        
+        glitching_violin_plot(glitch_arr, all_channels, station_id, run_label, save_location)
+        plot_glitch_q99_over_time(np.array(times), glitch_arr, all_channels, station_id, run_label, save_location)
+        
+        ##### Block offsets analysis
+        # Get the reference block offset results for the station
 
-    ##### Block offsets - dataProviderRNOG
-    logger.info("Starting block offset analysis (monitoring.root), results are not used to determine channel health, see warnings in the log file for channels with potential block offset issues. The block offsets are then removed.")
-    block_offset_arr_force = get_force_block_offsets_monitoring(block_offsets_arr, force_mask)
-    block_offset_stats = block_offset_statistics_monitoring(block_offset_arr_force=block_offset_arr_force, channel_list=all_channels)
-    
-    block_offset_results_dict = write_block_offset_results(block_offset_stats, station_id, run_label, ref_block_off_dict = ref_block_offset_results, results_dir = RESULTS_DIR, use_monitoring=use_monitoring)
-    plot_block_offsets_violin_monitoring(block_offset_arr_force, all_channels, station_id, run_label, save_location)
+        ref_block_offset_results_file = os.path.join(REFERENCE_DIR, "expected_block_offsets",f"expected_block_offsets_station{station_id}.json")
+        with open(ref_block_offset_results_file, "r") as f:
+            ref_block_offset_results = json.load(f)
+
+        logger.info("Starting block offset analysis (monitoring.root), results are not used to determine channel health, see warnings in the log file for channels with potential block offset issues. The block offsets are then removed.")
+        block_offset_arr_force = get_force_block_offsets_monitoring(block_offsets_arr, force_mask)
+        block_offset_stats = block_offset_statistics_monitoring(block_offset_arr_force=block_offset_arr_force, channel_list=all_channels)
+        
+        block_offset_results_dict = write_block_offset_results(block_offset_stats, station_id, run_label, ref_block_off_dict = ref_block_offset_results, results_dir = RESULTS_DIR, use_monitoring=use_monitoring)
+        plot_block_offsets_violin_monitoring(block_offset_arr_force, all_channels, station_id, run_label, save_location)
 
     # Trigger rate plots
     logger.info("Plotting trigger rates over time and heatmap of trigger rates for different trigger types...")
@@ -439,24 +455,45 @@ if __name__ == "__main__":
  
         
     # Create summary CSV file
-    create_result_csv_file(
-        station_id,
-        run_label,
-        n_events_force,
-        surface_channels,
-        downward_channels,
-        upward_channels,
-        all_channels,
-        all_validation_results,
-        glitch_info,
-        block_offset_results_dict,
-        rms_results,
-        modality_dict_force,
-        modality_dict_lt,
-        modality_dict_radiant0,
-        modality_dict_radiant1,
-        outlier_details_snr,
-        CSV_DIR,
-        rms_label
-    )
+    if digitizer_type == "radiant":
+        create_result_csv_file(
+            station_id,
+            run_label,
+            n_events_force,
+            surface_channels,
+            downward_channels,
+            upward_channels,
+            all_channels,
+            all_validation_results,
+            glitch_info,
+            block_offset_results_dict,
+            rms_results,
+            modality_dict_force,
+            modality_dict_lt,
+            modality_dict_radiant0,
+            modality_dict_radiant1,
+            outlier_details_snr,
+            CSV_DIR,
+            rms_label
+        )
+
+    elif digitizer_type == "didaq":
+        create_result_csv_file_didaq(
+                    station_id,
+                    run_label,
+                    n_events_force,
+                    surface_channels,
+                    downward_channels,
+                    upward_channels,
+                    all_channels,
+                    all_validation_results,
+                    rms_results,
+                    modality_dict_force,
+                    modality_dict_lt,
+                    modality_dict_radiant0,
+                    modality_dict_radiant1,
+                    outlier_details_snr,
+                    CSV_DIR,
+                    rms_label
+                )
     

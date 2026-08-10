@@ -3,12 +3,27 @@ import numpy as np
 import os
 from tqdm import tqdm
 import logging
+import json
+
+#### Script directory for json files
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PARENT_DIR = os.path.dirname(SCRIPT_DIR)
+CONFIG_DIR = os.path.join(PARENT_DIR, "config_files_sva")
+
+# DIDAQ bits
+didaq_bits = json.load(open(os.path.join(CONFIG_DIR, "config_station.json"), "r"))["didaq_bits"]
+
+_DIDAQ_DEEP_PHASED = didaq_bits["DIDAQ_DEEP_PHASED"]
+_DIDAQ_SURF_UP = didaq_bits["DIDAQ_SURF_UP"]
+_DIDAQ_SURF_DOWN = didaq_bits["DIDAQ_SURF_DOWN"]
 
 logger = logging.getLogger(__name__)
 
 def stack_if_object(branch_data):
     arr = np.array(branch_data)
     if arr.dtype == object:
+        if len(arr) == 0:
+            return np.array([])  # Return an empty array if the input is empty
         arr = np.stack(arr)
     return arr
 
@@ -18,23 +33,31 @@ def open_file(path):
         return None
     return uproot.open(path)
 
-def get_event_info_from_monitoring_file(file):
+def get_event_info_from_monitoring_file(file, daq_type):
     try:
         event_tree = file["events"]
         EventSummary = event_tree["EventSummary"]
         event_number_arr = stack_if_object(EventSummary["event_number"])
         rms_arr = stack_if_object(EventSummary["rms"])
         max_abs_amplitude_arr = stack_if_object(EventSummary["max_abs_amplitude"])
-        glitching_ts_arr = stack_if_object(EventSummary["glitching_test_statitic"]) # There is typo in the monitoring.root for glitch ts
-        block_offsets_arr = stack_if_object(EventSummary["block_offset"])
 
-        return {
-            "event_number_arr": event_number_arr, # (n_events,)
-            "rms_arr": rms_arr.T, # (n_ch, n_events)
-            "max_abs_amplitude_arr": max_abs_amplitude_arr.T, # (n_ch, n_events)
-            "glitching_test_statistic_arr": glitching_ts_arr.T, # (n_ch, n_events)
-            "block_offsets_arr": block_offsets_arr.T # (n_ch, n_events)
-        }
+        if daq_type == "didaq":
+            glitching_ts_arr = stack_if_object(EventSummary["glitching_test_statitic"]) # There is typo in the monitoring.root for glitch ts
+            block_offsets_arr = stack_if_object(EventSummary["block_offset"])
+
+            return {
+                "event_number_arr": event_number_arr, # (n_events,)
+                "rms_arr": rms_arr.T, # (n_ch, n_events)
+                "max_abs_amplitude_arr": max_abs_amplitude_arr.T, # (n_ch, n_events)
+                "glitching_test_statistic_arr": glitching_ts_arr.T, # (n_ch, n_events)
+                "block_offsets_arr": block_offsets_arr.T # (n_ch, n_events)
+            }
+        elif daq_type == "radiant": # no glitching test statistic or block offsets for radiant
+            return {
+                "event_number_arr": event_number_arr, # (n_events,)
+                "rms_arr": rms_arr.T, # (n_ch, n_events)
+                "max_abs_amplitude_arr": max_abs_amplitude_arr.T, # (n_ch, n_events)
+            }
     
     except KeyError as e:
         logger.error(f"Key {e} not found in events tree of monitoring file. Please check the structure of the monitoring file.")
@@ -50,46 +73,83 @@ def get_run_summary_from_monitoring_file(file):
         logger.error(f"Key {e} not found in run summary of monitoring file. Please check the structure of the monitoring file.")
         return None
 
-def get_info_from_header_file(header_file):
+def get_info_from_header_file(header_file, daq_type):
     try:
-        header = header_file["header"]
-        trigger_time = stack_if_object(header["trigger_time"])
-        trigger_time_utc = trigger_time.astype("datetime64[s]")
-        readout_time = stack_if_object(header["readout_time"])
-        duration = np.max(readout_time) - np.min(readout_time) # in seconds
-        run_no = stack_if_object(header["run_number"])
-        event_number = stack_if_object(header["event_number"])
-        station_id = stack_if_object(header["station_number"])
-        
-        trigger_info = header["trigger_info"]
-        force_trigger = stack_if_object(trigger_info["trigger_info.force_trigger"])
-        radiant_trigger = stack_if_object(trigger_info["trigger_info.radiant_trigger"])
-        lt_trigger = stack_if_object(trigger_info["trigger_info.lt_trigger"])
-        which_radiant = stack_if_object(trigger_info["trigger_info.which_radiant_trigger"])
+        if daq_type == "radiant":
+            header = header_file["header"]
+            trigger_time = stack_if_object(header["trigger_time"])
+            trigger_time_utc = trigger_time.astype("datetime64[s]")
+            readout_time = stack_if_object(header["readout_time"])
+            duration = np.max(readout_time) - np.min(readout_time) # in seconds
+            run_no = stack_if_object(header["run_number"])
+            event_number = stack_if_object(header["event_number"])
+            station_id = stack_if_object(header["station_number"])
+            
+            trigger_info = header["trigger_info"]
+            force_trigger = stack_if_object(trigger_info["trigger_info.force_trigger"])
+            radiant_trigger = stack_if_object(trigger_info["trigger_info.radiant_trigger"])
+            lt_trigger = stack_if_object(trigger_info["trigger_info.lt_trigger"])
+            which_radiant = stack_if_object(trigger_info["trigger_info.which_radiant_trigger"])
 
-        # If there are overlaps return None
-        overlap_mask = (force_trigger.astype(bool) & radiant_trigger.astype(bool)) | (force_trigger.astype(bool) & lt_trigger.astype(bool)) | (radiant_trigger.astype(bool) & lt_trigger.astype(bool))
-        if np.any(overlap_mask):
-            n_overlap = np.sum(overlap_mask)
-            overlap_event_indices = np.where(overlap_mask)[0]
-            force_radiant_overlap = np.where(force_trigger.astype(bool) & radiant_trigger.astype(bool))[0]
-            force_lt_overlap = np.where(force_trigger.astype(bool) & lt_trigger.astype(bool))[0]
-            radiant_lt_overlap = np.where(radiant_trigger.astype(bool) & lt_trigger.astype(bool))[0]
-            logger.error(f"Found {n_overlap} events with overlapping trigger types at indices: {overlap_event_indices} for run {run_no[0]}. FORCE-RADIANT: {force_radiant_overlap}, FORCE-LT: {force_lt_overlap}, RADIANT-LT: {radiant_lt_overlap}. Please check the trigger info in the header file.")
-            return None
-        
-        return {
-            "trigger_time_utc": trigger_time_utc,
-            "run_no": run_no,
-            "event_number": event_number,
-            "station_id": station_id,
-            "force_trigger": force_trigger,
-            "radiant_trigger": radiant_trigger,
-            "lt_trigger": lt_trigger,
-            "which_radiant": which_radiant,
-            "readout_time": readout_time,
-            "duration": duration
-        }
+            # If there are overlaps return None
+            overlap_mask = (force_trigger.astype(bool) & radiant_trigger.astype(bool)) | (force_trigger.astype(bool) & lt_trigger.astype(bool)) | (radiant_trigger.astype(bool) & lt_trigger.astype(bool))
+            if np.any(overlap_mask):
+                n_overlap = np.sum(overlap_mask)
+                overlap_event_indices = np.where(overlap_mask)[0]
+                force_radiant_overlap = np.where(force_trigger.astype(bool) & radiant_trigger.astype(bool))[0]
+                force_lt_overlap = np.where(force_trigger.astype(bool) & lt_trigger.astype(bool))[0]
+                radiant_lt_overlap = np.where(radiant_trigger.astype(bool) & lt_trigger.astype(bool))[0]
+                logger.error(f"Found {n_overlap} events with overlapping trigger types at indices: {overlap_event_indices} for run {run_no[0]}. FORCE-RADIANT: {force_radiant_overlap}, FORCE-LT: {force_lt_overlap}, RADIANT-LT: {radiant_lt_overlap}. Please check the trigger info in the header file.")
+                return None
+            
+            return {
+                "trigger_time_utc": trigger_time_utc,
+                "run_no": run_no,
+                "event_number": event_number,
+                "station_id": station_id,
+                "force_trigger": force_trigger,
+                "radiant_trigger": radiant_trigger,
+                "lt_trigger": lt_trigger,
+                "which_radiant": which_radiant,
+                "readout_time": readout_time,
+                "duration": duration
+            }
+
+        elif daq_type == "didaq":
+            header = header_file["header"]
+            trigger_time = stack_if_object(header["trigger_time"])
+            trigger_time_utc = trigger_time.astype("datetime64[s]")
+            readout_time = stack_if_object(header["readout_time"])
+            duration = np.max(readout_time) - np.min(readout_time) # in seconds
+            run_no = stack_if_object(header["run_number"])
+            event_number = stack_if_object(header["event_number"])
+            station_id = stack_if_object(header["station_number"])
+            
+            trigger_info = header["trigger_info"]
+            force_trigger = stack_if_object(trigger_info["trigger_info.force_trigger"])
+            didaq_trigger = stack_if_object(trigger_info["trigger_info.didaq_trigger"])
+            didaq_trigger_info_type = stack_if_object(trigger_info["trigger_info.didaq_trigger_info.type"])
+
+            # If there are overlaps return None
+            overlap_mask = (force_trigger.astype(bool) & didaq_trigger.astype(bool))
+            if np.any(overlap_mask):
+                n_overlap = np.sum(overlap_mask)
+                overlap_event_indices = np.where(overlap_mask)[0]
+                logger.error(f"Found {n_overlap} events with overlapping trigger types at indices: {overlap_event_indices} for run {run_no[0]}. Please check the trigger info in the header file.")
+                return None
+            
+            return {
+                "trigger_time_utc": trigger_time_utc,
+                "run_no": run_no,
+                "event_number": event_number,
+                "station_id": station_id,
+                "force_trigger": force_trigger,
+                "didaq_trigger": didaq_trigger,
+                "didaq_trigger_info_type": didaq_trigger_info_type,
+                "readout_time": readout_time,
+                "duration": duration
+            }
+
     
     except KeyError as e:
         logger.error(f"Key {e} not found in header file. Please check the structure of the header file.")
@@ -140,6 +200,67 @@ def assign_trigger_types(force_trigger, radiant_trigger, lt_trigger, which_trigg
     
     return trigger_type_arr
 
+def assign_trigger_types_didaq(force_trigger, didaq_trigger, didaq_info_type, default="UNKNOWN"):
+    if len(force_trigger) != len(didaq_trigger) or len(force_trigger) != len(didaq_info_type):
+        logger.error("Trigger arrays must have the same length.")
+        return None
+
+    n_events = len(force_trigger)
+    trigger_type_arr = np.full(n_events, default, dtype='<U10') 
+
+    trigger_type_arr[force_trigger] = "FORCE"
+
+    trigger_type_arr[force_trigger] = "FORCE"
+
+    trigger_type_arr[(didaq_trigger & _DIDAQ_DEEP_PHASED) != 0] = "DIDAQ_DEEP_PHASED"
+    trigger_type_arr[(didaq_trigger & _DIDAQ_SURF_UP) != 0] = "DIDAQ_SURF_UP"
+    trigger_type_arr[(didaq_trigger & _DIDAQ_SURF_DOWN) != 0] = "DIDAQ_SURF_DOWN"
+
+    ## Sanity checks
+    overlap_count = (force_trigger.astype(int) + didaq_trigger.astype(int))
+    overlap_mask = overlap_count > 1
+    if np.any(overlap_mask):
+        overlap_idx = np.where(overlap_mask)[0]
+        logger.error(f"Found {len(overlap_idx)} events with overlapping trigger types at indices {overlap_idx}. Please check the trigger info.")
+        return None 
+
+    wrong_force = np.where(force_trigger & (trigger_type_arr != "FORCE"))[0]
+    if len(wrong_force) > 0:
+        logger.error(f"Found {len(wrong_force)} events where force_trigger is True but trigger type is not assigned as FORCE at indices {wrong_force}. Please check the trigger info.")
+        return None
+
+    wrong_didaq = np.where(didaq_trigger & ~np.isin(trigger_type_arr, ["DIDAQ_COINC0", "DIDAQ_COINC1", "DIDAQ_DEEP_PHASED", "DIDAQ_SURF_UP", "DIDAQ_SURF_DOWN"]))[0]
+    if len(wrong_didaq) > 0:
+        logger.error(f"Found {len(wrong_didaq)} events where didaq_trigger is True but trigger type is not assigned as DIDAQ at indices {wrong_didaq}. Please check the trigger info.")
+        return None
+
+    unknown_idx = np.where(trigger_type_arr == default)[0]
+    if len(unknown_idx) > 0:
+        logger.warning(f"Found {len(unknown_idx)} events with trigger type not in FORCE, DIDAQ_COINC0, DIDAQ_COINC1, DIDAQ_DEEP_PHASED, DIDAQ_SURF_UP or DIDAQ_SURF_DOWN at indices {unknown_idx}. They are assigned as {default}.")
+    
+    return trigger_type_arr
+
+def check_event_numbers_according_to_trigger_types_didaq(trigger_type_arr, n_forced_triggers,n_lt_triggers,n_rf0_triggers,n_rf1_triggers,):
+    
+    unique, counts = np.unique(trigger_type_arr, return_counts=True)
+    trigger_type_counts = dict(zip(unique, counts))
+
+    expected_counts = {
+        "FORCE": n_forced_triggers,
+        "DIDAQ_DEEP_PHASED": n_lt_triggers,
+        "DIDAQ_SURF_UP": n_rf0_triggers,
+        "DIDAQ_SURF_DOWN": n_rf1_triggers,
+    }
+
+    for trigger_type, expected in expected_counts.items():
+        found = trigger_type_counts.get(trigger_type, 0)
+
+        if found != expected:
+            logger.error(f"Mismatch in trigger type counts for {trigger_type}: expected {expected}, found {found}. Please check the trigger info and event numbers.")
+            return False
+
+    return True
+
 def check_event_numbers_according_to_trigger_types(trigger_type_arr, n_forced_triggers,n_lt_triggers,n_rf0_triggers,n_rf1_triggers,):
     
     unique, counts = np.unique(trigger_type_arr, return_counts=True)
@@ -180,7 +301,7 @@ def choose_trigger_type_header(trigger_type_arr, trigger_type:str):
     mask = trigger_type_arr == trigger_type
     return mask
 
-def read_multiple_runs(base_path, station_id, run_numbers):
+def read_multiple_runs(base_path, station_id, run_numbers, daq_type):    
     all_event_info = []
 
     total_n_events = 0
@@ -221,9 +342,9 @@ def read_multiple_runs(base_path, station_id, run_numbers):
             failed_run_info[run_no] = msg
             continue
 
-        event_info_dict = get_event_info_from_monitoring_file(monitoring_file)
+        event_info_dict = get_event_info_from_monitoring_file(monitoring_file, daq_type)
         run_summary_dict = get_run_summary_from_monitoring_file(monitoring_file)
-        header_info_dict = get_info_from_header_file(header_file)
+        header_info_dict = get_info_from_header_file(header_file, daq_type)
 
         if event_info_dict is None:
             msg = f"Failed to read event info for run {run_no} for station {station_id}. Skipping this run."
@@ -303,12 +424,19 @@ def read_multiple_runs(base_path, station_id, run_numbers):
             continue
         
         # Start processing the run if all checks are passed
-        trigger_type_arr = assign_trigger_types(
-            header_info_dict["force_trigger"],
-            header_info_dict["radiant_trigger"],
-            header_info_dict["lt_trigger"],
-            header_info_dict["which_radiant"]
-        )
+        if daq_type == "radiant":
+            trigger_type_arr = assign_trigger_types(
+                header_info_dict["force_trigger"],
+                header_info_dict["radiant_trigger"],
+                header_info_dict["lt_trigger"],
+                header_info_dict["which_radiant"]
+            )
+        elif daq_type == "didaq":
+            trigger_type_arr = assign_trigger_types_didaq(
+                header_info_dict["force_trigger"],
+                header_info_dict["didaq_trigger"],
+                header_info_dict["didaq_trigger_info_type"]
+            )
 
         if trigger_type_arr is None:
             msg = f"Failed to assign trigger types for run {run_no} for station {station_id}. Skipping this run."
@@ -317,13 +445,22 @@ def read_multiple_runs(base_path, station_id, run_numbers):
             failed_run_info[run_no] = msg
             continue
 
-        check_event_numbers = check_event_numbers_according_to_trigger_types(
-            trigger_type_arr,
-            run_summary_dict["n_forced_triggers"],
-            run_summary_dict["n_lt_triggers"],
-            run_summary_dict["n_rf0_triggers"],
-            run_summary_dict["n_rf1_triggers"],
-        )
+        if daq_type == "radiant":
+            check_event_numbers = check_event_numbers_according_to_trigger_types(
+                trigger_type_arr,
+                run_summary_dict["n_forced_triggers"],
+                run_summary_dict["n_lt_triggers"],
+                run_summary_dict["n_rf0_triggers"],
+                run_summary_dict["n_rf1_triggers"],
+            )
+        elif daq_type == "didaq":
+            check_event_numbers = check_event_numbers_according_to_trigger_types_didaq(
+                trigger_type_arr,
+                run_summary_dict["n_forced_triggers"],
+                run_summary_dict["n_didaq_deep_phased_triggers"],
+                run_summary_dict["n_didaq_surf_up_triggers"],
+                run_summary_dict["n_didaq_surf_down_triggers"],
+            )
 
         if not check_event_numbers:
             msg = f"Event number check according to trigger types failed for run {run_no} for station {station_id}. Skipping this run."
@@ -341,29 +478,51 @@ def read_multiple_runs(base_path, station_id, run_numbers):
         event_info_dict["readout_time"] = header_info_dict["readout_time"] # (n_events,) 
 
         # Add runsummary 
-        event_info_dict["avg_spectrum"] = stack_if_object(run_summary_dict["avg_spectrum"]) # (n_ch, n_freqs)
-        event_info_dict["avg_spectrum_force"] = stack_if_object(run_summary_dict["avg_spectrum_force"]) # (n_ch, n_freqs)
-        event_info_dict["avg_spectrum_lt"] = stack_if_object(run_summary_dict["avg_spectrum_lt"]) # (n_ch, n_freqs)
-        event_info_dict["avg_spectrum_rf0"] = stack_if_object(run_summary_dict["avg_spectrum_rf0"]) #RADIANT0
-        event_info_dict["avg_spectrum_rf1"] = stack_if_object(run_summary_dict["avg_spectrum_rf1"]) #RADIANT1
+        if daq_type == "radiant":
+            event_info_dict["avg_spectrum"] = stack_if_object(run_summary_dict["avg_spectrum"]) # (n_ch, n_freqs)
+            event_info_dict["avg_spectrum_force"] = stack_if_object(run_summary_dict["avg_spectrum_force"]) # (n_ch, n_freqs)
+            event_info_dict["avg_spectrum_lt"] = stack_if_object(run_summary_dict["avg_spectrum_lt"]) # (n_ch, n_freqs)
+            event_info_dict["avg_spectrum_rf0"] = stack_if_object(run_summary_dict["avg_spectrum_rf0"]) #RADIANT0
+            event_info_dict["avg_spectrum_rf1"] = stack_if_object(run_summary_dict["avg_spectrum_rf1"]) #RADIANT1
 
+        elif daq_type == "didaq":
+            event_info_dict["avg_spectrum"] = stack_if_object(run_summary_dict["avg_spectrum"]) # (n_ch, n_freqs)
+            event_info_dict["avg_spectrum_force"] = stack_if_object(run_summary_dict["avg_spectrum_force"]) # (n_ch, n_freqs)
+            event_info_dict["avg_spectrum_lt"] = stack_if_object(run_summary_dict["avg_spectrum_didaq_deep_phased"]) #DIDAQ_DEEP_PHASED
+            event_info_dict["avg_spectrum_rf0"] = stack_if_object(run_summary_dict["avg_spectrum_didaq_surf_up"]) #DIDAQ_SURF_UP
+            event_info_dict["avg_spectrum_rf1"] = stack_if_object(run_summary_dict["avg_spectrum_didaq_surf_down"]) #DIDAQ_SURF_DOWN
+        
         # Calculate SNR and add to event info dict
         snr_arr = calculate_snr(event_info_dict["max_abs_amplitude_arr"], event_info_dict["rms_arr"])
         event_info_dict["snr_arr"] = snr_arr # (n_ch, n_events)
 
         # Count total events:
-        total_n_events += run_summary_dict["n_events"]
-        total_n_force_triggers += run_summary_dict["n_forced_triggers"]
-        total_n_lt_triggers += run_summary_dict["n_lt_triggers"]
-        total_n_rf0_triggers += run_summary_dict["n_rf0_triggers"]  
-        total_n_rf1_triggers += run_summary_dict["n_rf1_triggers"]
+        if daq_type == "radiant":
+            total_n_events += run_summary_dict["n_events"]
+            total_n_force_triggers += run_summary_dict["n_forced_triggers"]
+            total_n_lt_triggers += run_summary_dict["n_lt_triggers"]
+            total_n_rf0_triggers += run_summary_dict["n_rf0_triggers"]  
+            total_n_rf1_triggers += run_summary_dict["n_rf1_triggers"]
 
-
+        elif daq_type == "didaq":
+            total_n_events += run_summary_dict["n_events"]
+            total_n_force_triggers += run_summary_dict["n_forced_triggers"]
+            total_n_lt_triggers += run_summary_dict["n_didaq_deep_phased_triggers"]
+            total_n_rf0_triggers += run_summary_dict["n_didaq_surf_up_triggers"]  
+            total_n_rf1_triggers += run_summary_dict["n_didaq_surf_down_triggers"]
+        
         # Calculate trigger rates and add to run_trigger_rates dict for this run
-        trigger_rate_force = run_summary_dict["n_forced_triggers"] / event_info_dict["duration"]
-        trigger_rate_lt = run_summary_dict["n_lt_triggers"] / event_info_dict["duration"]
-        trigger_rate_rf0 = run_summary_dict["n_rf0_triggers"] / event_info_dict["duration"]
-        trigger_rate_rf1 = run_summary_dict["n_rf1_triggers"] / event_info_dict["duration"]
+        if daq_type == "radiant":
+            trigger_rate_force = run_summary_dict["n_forced_triggers"] / event_info_dict["duration"]
+            trigger_rate_lt = run_summary_dict["n_lt_triggers"] / event_info_dict["duration"]
+            trigger_rate_rf0 = run_summary_dict["n_rf0_triggers"] / event_info_dict["duration"]
+            trigger_rate_rf1 = run_summary_dict["n_rf1_triggers"] / event_info_dict["duration"]
+
+        elif daq_type == "didaq":
+            trigger_rate_force = run_summary_dict["n_forced_triggers"] / event_info_dict["duration"]
+            trigger_rate_lt = run_summary_dict["n_didaq_deep_phased_triggers"] / event_info_dict["duration"]
+            trigger_rate_rf0 = run_summary_dict["n_didaq_surf_up_triggers"] / event_info_dict["duration"]
+            trigger_rate_rf1 = run_summary_dict["n_didaq_surf_down_triggers"] / event_info_dict["duration"]
 
         run_trigger_rates[run_no] = {
             "force_trigger_rate": trigger_rate_force,
@@ -374,13 +533,22 @@ def read_multiple_runs(base_path, station_id, run_numbers):
         }
 
         # Add event counts for this run to the run_event_counts dict
-        run_event_counts[run_no] = {
-            "n_events": run_summary_dict["n_events"],
-            "n_forced_triggers": run_summary_dict["n_forced_triggers"],
-            "n_lt_triggers": run_summary_dict["n_lt_triggers"],
-            "n_rf0_triggers": run_summary_dict["n_rf0_triggers"],
-            "n_rf1_triggers": run_summary_dict["n_rf1_triggers"],
-        }
+        if daq_type == "radiant":
+            run_event_counts[run_no] = {
+                "n_events": run_summary_dict["n_events"],
+                "n_forced_triggers": run_summary_dict["n_forced_triggers"],
+                "n_lt_triggers": run_summary_dict["n_lt_triggers"],
+                "n_rf0_triggers": run_summary_dict["n_rf0_triggers"],
+                "n_rf1_triggers": run_summary_dict["n_rf1_triggers"],
+            }
+        elif daq_type == "didaq":
+            run_event_counts[run_no] = {
+                "n_events": run_summary_dict["n_events"],
+                "n_forced_triggers": run_summary_dict["n_forced_triggers"],
+                "n_didaq_deep_phased_triggers": run_summary_dict["n_didaq_deep_phased_triggers"],
+                "n_didaq_surf_up_triggers": run_summary_dict["n_didaq_surf_up_triggers"],
+                "n_didaq_surf_down_triggers": run_summary_dict["n_didaq_surf_down_triggers"],
+            }
 
         
         if freqs is None:

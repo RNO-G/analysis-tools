@@ -9,7 +9,8 @@
         "hpol_channels": [4, 8, 11, 21],
         "phased_array_channels": [0, 1, 2, 3],
         "reference_channels": [12, 14, 15, 17, 18, 20], 
-        "reference_channels_galaxy": [12, 14, 15, 17, 18, 20]
+        "reference_channels_galaxy": [12, 14, 15, 17, 18, 20],
+        "daq_type": "radiant"
     },
 
     "station_specific_adjustments" : {
@@ -21,6 +22,22 @@
             "vpol_channels": [0, 1, 2, 3, 5, 6, 7, 9, 10, 20, 22, 23], 
             "reference_channels": [12, 14, 17, 19],
             "reference_channels_galaxy": [12, 14, 19]
+        },
+        "25" : {
+            "surface_channels": [12, 13, 14, 15, 16, 17, 18 , 19],
+            "deep_channels": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 20, 21, 22, 23],
+            "upward_channels": [16, 17, 18, 19],
+            "downward_channels": [12, 13, 14, 15],
+            "vpol_channels": [0, 1, 2, 3, 5, 6, 7, 9, 10, 20, 22, 23], 
+            "reference_channels": [12, 14, 17, 19],
+            "reference_channels_galaxy": [12, 14],
+            "daq_type": "didaq"
         }
+    },
+
+    "didaq_bits" : {
+        "DIDAQ_DEEP_PHASED": 8,
+        "DIDAQ_SURF_UP": 16,
+        "DIDAQ_SURF_DOWN": 32
     }
 }
