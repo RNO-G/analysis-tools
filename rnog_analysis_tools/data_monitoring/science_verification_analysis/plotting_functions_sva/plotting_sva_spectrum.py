@@ -30,8 +30,10 @@ def get_weights_if_monitoring(trigger_label, use_monitoring=False, run_event_cou
 #### Spectrum Plots ####
 def plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label, use_monitoring = False, run_event_counts = None):
     '''Plot time-integrated surface channel spectra. Use weighted average if use_monitoring is True and run_event_counts is provided, otherwise use simple average.'''
+    print(f"shape of spec_arr: {spec_arr.shape}, shape of freqs: {freqs.shape} [INSIDE FUNCTION]")
     plt.figure(figsize=(10, 6))
     weights, unit_label = get_weights_if_monitoring(trigger_label, use_monitoring, run_event_counts)
+    #print(f"shape of spec_arr: {spec_arr.shape}, shape of freqs: {freqs.shape}")
     for ch in upward_channels:
         if weights is not None:
             spec_mean = np.average(spec_arr[ch, :, :], axis=0, weights=weights)
@@ -92,12 +94,12 @@ def plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr, f
     plt.axvspan(0.136e3, 0.139e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
     plt.axvspan(0.151e3, 0.157e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
     plt.axvspan(0.125e3, 0.127e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
-    plt.axvspan(500, 650, color=normcolor, alpha=0.3, label="_nolegend_")
+    plt.axvspan(300, 350, color=normcolor, alpha=0.3, label="_nolegend_")
 
     plt.xlabel('Frequency [MHz]')
     plt.xlim(50, 800)
     plt.ylim(0, )
-    plt.ylabel(f'Amplitude Spectrum [{unit_label}]')
+    plt.ylabel(f'Normalized Amplitude Spectrum [a.u.]')
     plt.title(f'Time-Integrated Spectrum of Surface Channels (FORCE Trigger)')
     
     ax = plt.gca()
@@ -163,18 +165,24 @@ def plot_time_integrated_deep_spectra(station_id, spec_arr, freqs, vpol_channels
 
 def plot_time_integrated_surface_spectra_normalized_example_reference(station_id, norm_spec_arr, freqs, upward_channels, downward_channels, save_location, run_label, use_monitoring = False, run_event_counts = None):
     '''Plot time-integrated normalized surface channel spectra for FORCE trigger events. Use weighted average if use_monitoring is True and run_event_counts is provided, otherwise use simple average.'''
+    up_color = "#0072B2"       # blue
+    down_color = "#D55E00"     # vermillion
     plt.figure(figsize=(10, 6))
     trigger_label = "force"
     weights, unit_label = get_weights_if_monitoring(trigger_label, use_monitoring, run_event_counts)
-    ch = upward_channels[0]  # Just plot the first upward channel as an example
+    ch = upward_channels[2]  # Just plot the first upward channel as an example
+    down_channel = downward_channels[1]  # Just plot the first downward channel as an example
     ref_channels = [12, 14, 19]
     if weights is not None:
         spec_mean = np.average(norm_spec_arr[ch, :, :], axis=0, weights=weights) #shape (n_freqs,)
+        spec_mean_down = np.average(norm_spec_arr[down_channel, :, :], axis=0, weights=weights) #shape (n_freqs,)
     else:
         spec_mean = np.mean(norm_spec_arr[ch, :, :], axis=0)
+        spec_mean_down = np.mean(norm_spec_arr[down_channel, :, :], axis=0)
     ref_mean = np.mean(norm_spec_arr[ref_channels, :, :], axis=(0, 1)) #shape (n_freqs,)
     
-    plt.plot(freqs[1:] / units.MHz, spec_mean[1:], label=f'Ch {ch} (up)', linestyle='-')
+    plt.plot(freqs[1:] / units.MHz, spec_mean[1:], label=f'Ch {ch} (up)', linestyle='-', color=up_color)
+    plt.plot(freqs[1:] / units.MHz, spec_mean_down[1:], label=f'Ch {down_channel} (down)', linestyle='-.', color=down_color)
     plt.plot(freqs[1:] / units.MHz, ref_mean[1:], label=f'Reference Spectrum', linestyle='--', color='black')
 
     periodiccolor2 = "mediumseagreen"
@@ -183,21 +191,21 @@ def plot_time_integrated_surface_spectra_normalized_example_reference(station_id
     normcolor = "steelblue"
 
     plt.axvspan(80, 120, color=excesscolor, alpha=0.3, label="_nolegend_")
-    # plt.axvline(x=0.403e3, color=wb_color, linestyle='--', linewidth=1.2, label="_nolegend_", alpha=0.7)
-    # plt.axvspan(0.278e3, 0.285e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
-    # plt.axvspan(0.482e3, 0.485e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
-    # plt.axvspan(0.240e3, 0.272e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
-    # plt.axvspan(0.360e3, 0.380e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
-    # plt.axvspan(0.136e3, 0.139e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
-    # plt.axvspan(0.151e3, 0.157e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
-    # plt.axvspan(0.125e3, 0.127e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
-    plt.axvspan(500, 650, color=normcolor, alpha=0.3, label="_nolegend_")
+    plt.axvline(x=0.403e3, color=wb_color, linestyle='--', linewidth=1.2, label="_nolegend_", alpha=0.7)
+    plt.axvspan(0.278e3, 0.285e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
+    plt.axvspan(0.482e3, 0.485e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
+    plt.axvspan(0.240e3, 0.272e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
+    plt.axvspan(0.360e3, 0.380e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
+    plt.axvspan(0.136e3, 0.139e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
+    plt.axvspan(0.151e3, 0.157e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
+    plt.axvspan(0.125e3, 0.127e3, color=periodiccolor2, alpha=0.3, label="_nolegend_")
+    plt.axvspan(300, 350, color=normcolor, alpha=0.3, label="_nolegend_")
 
     plt.xlabel('Frequency [MHz]')
     plt.xlim(50, 800)
     plt.ylim(0, )
-    plt.ylabel(f'Amplitude Spectrum [{unit_label}]')
-    plt.title(f'Time-Integrated Spectrum of Surface Channels (FORCE Trigger)')
+    plt.ylabel(f'Normalized Amplitude Spectrum [a.u.]')
+    #plt.title(f'Time-Integrated Spectrum of Surface Channels (FORCE Trigger)')
     
     ax = plt.gca()
     line_legend = ax.legend(
@@ -209,8 +217,8 @@ def plot_time_integrated_surface_spectra_normalized_example_reference(station_id
     
     annotation_handles = [
         Patch(facecolor=excesscolor, alpha=0.3, label="Galactic Excess"),
-        #Line2D([0], [0], color=wb_color, linestyle="--", linewidth=1.2, label="Weather Balloon"),
-        #Patch(facecolor=periodiccolor2, alpha=0.3, label="Periodic Signal"),
+        Line2D([0], [0], color=wb_color, linestyle="--", linewidth=1.2, label="Weather Balloon"),
+        Patch(facecolor=periodiccolor2, alpha=0.3, label="Periodic Signal"),
         Patch(facecolor=normcolor, alpha=0.3, label="Normalization Region"),]
 
     annotation_legend = ax.legend(

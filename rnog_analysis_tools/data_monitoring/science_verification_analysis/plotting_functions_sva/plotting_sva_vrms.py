@@ -352,6 +352,142 @@ def plot_vrms_values_against_time_single_trigger_zscore(times, vrms_arr, flag, z
 
     plt.close(fig)
 
+def plot_vrms_values_against_time_single_channel_zscore(
+    times,
+    vrms_arr,
+    flag,
+    z_score,
+    k_values,
+    trigger_name,
+    channel,
+    station_id,
+    run_label,
+    save_location,
+    day_interval=None,
+    use_monitoring=False
+):
+    if use_monitoring:
+        unit_label = "RMS [ADC]"
+        plot_label = "rms"
+    else:
+        unit_label = r"$V_\mathrm{rms}$ [V]"
+        plot_label = "vrms"
+
+    times = pd.to_datetime(times, utc=True)
+
+    if day_interval is None:
+        day_interval = choose_day_interval(times)
+
+    fig, ax = plt.subplots(figsize=(10,5))
+
+    vrms_ch = vrms_arr[channel]
+    flag_ch = flag[channel]
+
+    good_mask = ~flag_ch
+
+    ax.scatter(
+        times[good_mask],
+        vrms_ch[good_mask],
+        s=8,
+        alpha=0.25,
+        color="gray",
+        rasterized=True
+    )
+
+    zex = np.abs(z_score[channel]) - k_values[channel]
+    zex = np.clip(zex,0,None)
+
+    sc = ax.scatter(
+        times[flag_ch],
+        vrms_ch[flag_ch],
+        s=8,
+        c=zex[flag_ch],
+        cmap="Reds",
+        rasterized=True
+    )
+
+    if np.any(flag_ch):
+        plt.colorbar(sc, ax=ax, label=r"$|z|-k$")
+
+    red = plt.cm.Reds(0.6)
+
+    legend_handles = [
+        Line2D(
+            [0],[0],
+            marker="o",
+            color="none",
+            markeredgecolor="gray",
+            markerfacecolor="gray",
+            alpha=0.4,
+            markersize=6,
+            label=r"$|z|\leq k$"
+        ),
+        Line2D(
+            [0],[0],
+            marker="o",
+            color="none",
+            markeredgecolor=red,
+            markerfacecolor=red,
+            markersize=6,
+            label=r"$|z|>k$"
+        )
+    ]
+
+    time_span = (times.max() - times.min()).total_seconds() / 86400.0
+
+    if time_span < 1:
+        ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
+        ax.xaxis.set_major_formatter(
+            mdates.DateFormatter("%m-%d\n%H:%M", tz=timezone.utc)
+        )
+    elif time_span < 3:
+        ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
+        ax.xaxis.set_major_formatter(
+            mdates.DateFormatter("%m-%d\n%H:%M", tz=timezone.utc)
+        )
+    else:
+        ax.xaxis.set_major_locator(
+            mdates.DayLocator(interval=day_interval)
+        )
+        ax.xaxis.set_major_formatter(
+            mdates.DateFormatter("%m-%d", tz=timezone.utc)
+        )
+
+    ax.set_xlabel("Date [UTC]")
+    ax.set_ylabel(unit_label)
+    ax.grid(alpha=0.4)
+
+    ax.text(
+        0.85,
+        0.95,
+        f"Ch {channel}",
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        bbox=dict(
+            boxstyle="round, pad=0.25",
+            facecolor="white",
+            alpha=0.8
+        )
+    )
+
+    ax.legend(handles=legend_handles, loc="upper left")
+    #ax.set_title(f"{unit_label} vs Time — {trigger_name}")
+
+    fig.autofmt_xdate()
+    plt.tight_layout()
+
+    filename = (
+        f"{plot_label}_against_time_"
+        f"{trigger_name.lower()}_"
+        f"ch{channel}_"
+        f"{station_id}_{run_label}.pdf"
+    )
+
+    plt.savefig(os.path.join(save_location,filename))
+
+    plt.close(fig)
+
 def plot_rolling_mean_std(times, rolling_mean_arr, rolling_std_arr, channel_list, station_id, run_label, trigger_name, save_location, n_rows=12, n_cols=2, day_interval=None, use_monitoring=False):
     '''Plot rolling mean and std for Vrms values against time for each channel.'''
     times = pd.to_datetime(times, utc=True)

@@ -355,5 +355,161 @@ def create_result_csv_file(station_id, run_label, n_events_force, surface_channe
     df.to_csv(out_csv_file, index=False)
     logger.info(f"Validation summary saved to {out_csv_file}")
 
+def create_result_csv_file_didaq(station_id, run_label, n_events_force, surface_channels, downward_channels, upward_channels, all_channels, validation_results, rms_results, modality_dict_force, modality_dict_lt, 
+                           modality_dict_radiant0, modality_dict_radiant1, outlier_details, csv_dir, rms_label):
+    out_csv_file = os.path.join(csv_dir, f"validation_summary_station{station_id}_{run_label}.csv")
+    ch_list = list(all_channels)
+
+    spectral_col = []
+    rms_stability_col = []
+    modality_force_col = []
+    modality_lt_col = []
+    modality_radiant0_col = []
+    modality_radiant1_col = []
+    snr_col = []
+
+    for ch in ch_list:
+        df_spec_val = ""
+        if ch in surface_channels:
+            spectral_validation = None
+            vr = validation_results.get(ch, {})
+            spectral_validation = vr.get("galactic_excess", {})
+
+            if spectral_validation is None:
+                df_spec_val = "?"
+            else:
+                if ch in downward_channels:
+                    if spectral_validation == "NO EXCESS":
+                        df_spec_val = "OK"
+                    elif spectral_validation == "WEAK EXCESS":
+                        df_spec_val = "!!"
+                    elif spectral_validation in ["MODERATE EXCESS", "STRONG EXCESS"]:
+                        df_spec_val = "X"
+                    else:
+                        df_spec_val = "?"
+                elif ch in upward_channels:
+                    if spectral_validation in ["STRONG EXCESS", "MODERATE EXCESS"]:
+                        df_spec_val = "OK"
+                    elif spectral_validation == "WEAK EXCESS":
+                        df_spec_val = "!!"
+                    elif spectral_validation == "NO EXCESS":
+                        df_spec_val = "X"
+                    else:
+                        df_spec_val = "?"
+                else:
+                    df_spec_val = "?"
+        else:
+            df_spec_val = "-"
+
+        spectral_col.append(df_spec_val)
+
+        # Vrms analysis column
+        if rms_results[ch] is None:
+            rms_val = "-"
+            rms_stability_col.append(rms_val)
+        else:
+            rms_value = rms_results[ch].get("decision", "-")
+            rms_stability_col.append(rms_value)
+
+        if modality_dict_force is None:
+            modality_value = "-"
+            modality_force_col.append(modality_value)
+        else:
+            n_peaks = modality_dict_force[ch]["n_peaks"]
+            if n_peaks == 0:
+                modality_value = "!!"
+            elif n_peaks == 1:
+                modality_value = "OK"
+            elif n_peaks == 2:
+                modality_value = "X"
+            else:
+                modality_value = f"X"
+            modality_force_col.append(modality_value)
+
+        if modality_dict_lt is None:
+            modality_value = "-"
+            modality_lt_col.append(modality_value)
+        else:
+            n_peaks = modality_dict_lt[ch]["n_peaks"]
+            if n_peaks == 0:
+                modality_value = "!!"
+            elif n_peaks == 1:
+                modality_value = "OK"
+            elif n_peaks == 2:
+                modality_value = "X"
+            else:
+                modality_value = f"X"
+            modality_lt_col.append(modality_value)
+
+        if modality_dict_radiant0 is None:
+            modality_value = "-"
+            modality_radiant0_col.append(modality_value)
+        else:
+            n_peaks = modality_dict_radiant0[ch]["n_peaks"]
+            if n_peaks == 0:
+                modality_value = "!!"
+            elif n_peaks == 1:
+                modality_value = "OK"
+            elif n_peaks == 2:
+                modality_value = "X"
+            else:
+                modality_value = "X"
+            modality_radiant0_col.append(modality_value)
+        if modality_dict_radiant1 is None:
+            modality_value = "-"
+            modality_radiant1_col.append(modality_value)
+        else:
+            n_peaks = modality_dict_radiant1[ch]["n_peaks"]
+            if n_peaks == 0:
+                modality_value = "!!"
+            elif n_peaks == 1:
+                modality_value = "OK"
+            elif n_peaks == 2:
+                modality_value = "X"
+            else:
+                modality_value = "X"
+            modality_radiant1_col.append(modality_value)
+
+        # SNR validation column
+        outlier_ch_info = outlier_details.get(ch, [])
+        n_out = len(outlier_ch_info)
+        if n_out == 0:
+            snr_value = "OK"
+        else:
+            max_delta = max(abs(o.get("z_minus_k", 0.0)) for o in outlier_ch_info)
+            frac_out = n_out / n_events_force if n_events_force > 0 else 0.0
+            if max_delta < 3.0:
+                snr_value = "OK"
+
+            elif max_delta < 5.0:
+                snr_value = "OK" if frac_out < 0.002 else "!!"
+
+            else:  # max_delta >= 5
+                if n_out == 1 and frac_out < 0.002:
+                    snr_value = "OK"
+                elif frac_out < 0.004:
+                    snr_value = "!!"
+                else:
+                    snr_value = "X"
+        snr_col.append(snr_value)
+
+    
+    df = pd.DataFrame({
+        "Channel": ch_list,
+        "SNR": snr_col,
+        "Galaxy (FORCE)": spectral_col,
+        f"{rms_label.capitalize()} Stability (FORCE)": rms_stability_col,
+        f"{rms_label.capitalize()} (FORCE)": modality_force_col,
+        f"{rms_label.capitalize()} (LT)": modality_lt_col,
+        f"{rms_label.capitalize()} (RADIANT0)": modality_radiant0_col,
+        f"{rms_label.capitalize()} (RADIANT1)": modality_radiant1_col,
+    })
+
+    health_cols =["SNR", "Galaxy (FORCE)", f"{rms_label.capitalize()} Stability (FORCE)", f"{rms_label.capitalize()} (FORCE)"]
+    df["Channel Health (FORCE)"] = df[health_cols].apply(channel_health, axis=1)
+    df.to_csv(out_csv_file, index=False)
+    logger.info(f"Validation summary saved to {out_csv_file}")
+
+
 
 
