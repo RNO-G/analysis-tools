@@ -355,6 +355,8 @@ def create_result_csv_file(station_id, run_label, n_events_force, surface_channe
     df.to_csv(out_csv_file, index=False)
     logger.info(f"Validation summary saved to {out_csv_file}")
 
+    return df 
+
 def create_result_csv_file_didaq(station_id, run_label, n_events_force, surface_channels, downward_channels, upward_channels, all_channels, validation_results, rms_results, modality_dict_force, modality_dict_lt, 
                            modality_dict_radiant0, modality_dict_radiant1, outlier_details, csv_dir, rms_label):
     out_csv_file = os.path.join(csv_dir, f"validation_summary_station{station_id}_{run_label}.csv")
@@ -500,15 +502,17 @@ def create_result_csv_file_didaq(station_id, run_label, n_events_force, surface_
         "Galaxy (FORCE)": spectral_col,
         f"{rms_label.capitalize()} Stability (FORCE)": rms_stability_col,
         f"{rms_label.capitalize()} (FORCE)": modality_force_col,
-        f"{rms_label.capitalize()} (LT)": modality_lt_col,
-        f"{rms_label.capitalize()} (RADIANT0)": modality_radiant0_col,
-        f"{rms_label.capitalize()} (RADIANT1)": modality_radiant1_col,
+        f"{rms_label.capitalize()} (DEEP PHASED)": modality_lt_col,
+        f"{rms_label.capitalize()} (SURF UP)": modality_radiant0_col,
+        f"{rms_label.capitalize()} (SURF DOWN)": modality_radiant1_col,
     })
 
     health_cols =["SNR", "Galaxy (FORCE)", f"{rms_label.capitalize()} Stability (FORCE)", f"{rms_label.capitalize()} (FORCE)"]
     df["Channel Health (FORCE)"] = df[health_cols].apply(channel_health, axis=1)
     df.to_csv(out_csv_file, index=False)
     logger.info(f"Validation summary saved to {out_csv_file}")
+
+    return df 
 
 
 
