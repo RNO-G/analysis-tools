@@ -16,6 +16,8 @@ didaq_bits = json.load(open(os.path.join(CONFIG_DIR, "config_station.json"), "r"
 _DIDAQ_DEEP_PHASED = didaq_bits["DIDAQ_DEEP_PHASED"]
 _DIDAQ_SURF_UP = didaq_bits["DIDAQ_SURF_UP"]
 _DIDAQ_SURF_DOWN = didaq_bits["DIDAQ_SURF_DOWN"]
+_DIDAQ_COINC0 = didaq_bits["DIDAQ_COINC0"]
+_DIDAQ_COINC1 = didaq_bits["DIDAQ_COINC1"]
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +130,7 @@ def get_info_from_header_file(header_file, daq_type):
             trigger_info = header["trigger_info"]
             force_trigger = stack_if_object(trigger_info["trigger_info.force_trigger"])
             didaq_trigger = stack_if_object(trigger_info["trigger_info.didaq_trigger"])
-            didaq_trigger_info_type = stack_if_object(trigger_info["trigger_info.didaq_trigger_info.type"])
+            didaq_trigger_info_type = stack_if_object(trigger_info["trigger_info.didaq_info.type"])
 
             # If there are overlaps return None
             overlap_mask = (force_trigger.astype(bool) & didaq_trigger.astype(bool))
@@ -206,15 +208,15 @@ def assign_trigger_types_didaq(force_trigger, didaq_trigger, didaq_info_type, de
         return None
 
     n_events = len(force_trigger)
-    trigger_type_arr = np.full(n_events, default, dtype='<U10') 
+    trigger_type_arr = np.full(n_events, default, dtype='<U20') # DIDAQ labels (e.g. "DIDAQ_DEEP_PHASED") are longer than <U10 and would get silently truncated
 
     trigger_type_arr[force_trigger] = "FORCE"
 
-    trigger_type_arr[force_trigger] = "FORCE"
-
-    trigger_type_arr[(didaq_trigger & _DIDAQ_DEEP_PHASED) != 0] = "DIDAQ_DEEP_PHASED"
-    trigger_type_arr[(didaq_trigger & _DIDAQ_SURF_UP) != 0] = "DIDAQ_SURF_UP"
-    trigger_type_arr[(didaq_trigger & _DIDAQ_SURF_DOWN) != 0] = "DIDAQ_SURF_DOWN"
+    trigger_type_arr[(didaq_info_type & _DIDAQ_DEEP_PHASED) != 0] = "DIDAQ_DEEP_PHASED"
+    trigger_type_arr[(didaq_info_type & _DIDAQ_SURF_UP) != 0] = "DIDAQ_SURF_UP"
+    trigger_type_arr[(didaq_info_type & _DIDAQ_SURF_DOWN) != 0] = "DIDAQ_SURF_DOWN"
+    trigger_type_arr[(didaq_info_type & _DIDAQ_COINC0) != 0] = "DIDAQ_COINC0"
+    trigger_type_arr[(didaq_info_type & _DIDAQ_COINC1) != 0] = "DIDAQ_COINC1"
 
     ## Sanity checks
     overlap_count = (force_trigger.astype(int) + didaq_trigger.astype(int))
@@ -319,7 +321,11 @@ def read_multiple_runs(base_path, station_id, run_numbers, daq_type):
     run_trigger_rates = {}
 
     spectrum_keys = ["avg_spectrum", "avg_spectrum_force", "avg_spectrum_lt", "avg_spectrum_rf0", "avg_spectrum_rf1"] # (n_ch, n_freqs)
-    channel_event_keys = ["rms_arr", "max_abs_amplitude_arr", "glitching_test_statistic_arr", "block_offsets_arr", "snr_arr"] # (n_ch, n_events)
+
+    if daq_type == "didaq":
+        channel_event_keys = ["rms_arr", "max_abs_amplitude_arr", "snr_arr"] # (n_ch, n_events)
+    elif daq_type == "radiant":
+        channel_event_keys = ["rms_arr", "max_abs_amplitude_arr", "glitching_test_statistic_arr", "block_offsets_arr", "snr_arr"] # (n_ch, n_events)
     event_keys = ["event_number_arr", "triggerType", "trigger_time_utc", "run_no", "station_id"] # 1D arrays with shape (n_events,)
 
     freqs = None

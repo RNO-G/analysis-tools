@@ -85,7 +85,8 @@ if __name__ == "__main__":
 
     argparser.add_argument("-st", "--station_id", type=int, required=True, help="Station to analyze, e.g --station_id 14")
     argparser.add_argument("--data_location", type=str, default="desy", help="Location of the data. Use 'desy' (inbox data), 'uchicago' (mirrored data) or provide a custom path to the data directory, e.g. --data_location /path/to/data")
-
+    argparser.add_argument("-ex", "--exclude-runs", nargs="+", type=int, default=[], metavar="RUN", help="Run number(s) to exclude, e.g. --exclude-runs 1005 1010")
+    
     run_selection = argparser.add_mutually_exclusive_group(required=True)
     run_selection.add_argument("--runs", nargs="+", type=int, metavar="RUN_NUMBERS",
                            help="Run number(s) to analyze. Each run number should be given explicitly separated by a space, e.g. --runs 1001 1002 1005")
@@ -93,10 +94,6 @@ if __name__ == "__main__":
                             help="Range of run numbers to analyze (inclusive). Provide start and end run numbers separated by a space, e.g. --run_range 1000 1050")
     run_selection.add_argument("--time_range", nargs=2, type=str, metavar=("START_DATE", "END_DATE"),
                             help="Date range to analyze (inclusive). Provide start and end dates separated by a space in YYYY-MM-DD format, e.g. --time_range 2024-07-15 2024-09-30")
-
-    argparser.add_argument("-ex", "--exclude-runs", nargs="+", type=int, default=[], metavar="RUN", help="Run number(s) to exclude, e.g. --exclude-runs 1005 1010")
-    argparser.add_argument("--debug_plot", action="store_true", help="If set, will create debug plots.")
-
 
     args = argparser.parse_args()
 
@@ -132,7 +129,7 @@ if __name__ == "__main__":
 
     # Date and random string for unique save directory
     date_label = datetime.datetime.now().strftime("%y-%m-%d")
-    random_string = ''.join(random.choices(string.ascii_letters + string.digits, k=6))
+    random_string = ''.join(random.choices(string.digits, k=6))
 
     save_directory_label = (f"{date_label}_station-{station_id}_run{first_run}-run{last_run}_{random_string}")
 
@@ -151,6 +148,7 @@ if __name__ == "__main__":
         logger.info(f"Using custom data location {args.data_location} for the analysis.")
         base_data_path = args.data_location
         result_base_data_path = os.path.join(args.data_location, "results")
+        
 
     result_save_location = os.path.join(result_base_data_path, save_directory_label)
     os.makedirs(result_save_location, exist_ok=True)
@@ -519,8 +517,8 @@ if __name__ == "__main__":
     #### Standard plots for the analysis results
     # FORCE trigger spectra - normalized, unnormalized
     plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr_force, freqs, upward_channels, downward_channels, standard_plots, run_label, use_monitoring=use_monitoring, run_event_counts=run_event_counts)
-    plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_force, freqs, upward_channels, downward_channels, standard_plots, run_label, trigger_label="force", use_monitoring=use_monitoring, run_event_counts=run_event_counts)
-    plot_time_integrated_deep_spectra(station_id, spec_arr_force, freqs, vpol_channels, hpol_channels, standard_plots, run_label, trigger_label="force", use_monitoring=use_monitoring, run_event_counts=run_event_counts)
+    plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_force, freqs, upward_channels, downward_channels, standard_plots, run_label, trigger_label="force", use_monitoring=use_monitoring, run_event_counts=run_event_counts, daq_type=digitizer_type)
+    plot_time_integrated_deep_spectra(station_id, spec_arr_force, freqs, vpol_channels, hpol_channels, standard_plots, run_label, trigger_label="force", use_monitoring=use_monitoring, run_event_counts=run_event_counts, daq_type=digitizer_type)
 
     # SNR against time (FORCE trigger)
     plot_snr_against_time(station_id, times_force, snr_arr_force, flag_outliers_snr, z_score_arr_log_snr, k_values_log_snr, all_channels, standard_plots, run_label, nrows=12, ncols=2, day_interval=day_interval)
@@ -567,9 +565,9 @@ if __name__ == "__main__":
         spec_arr_trig = {"lt": spec_arr_lt, "radiant0": spec_arr_radiant0, "radiant1": spec_arr_radiant1}[trig_key]
         trigger_label = trigger_types_daq[trig_key]
         # Surface spectrum
-        plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_trig, freqs, upward_channels, downward_channels, other_debug_plots, run_label, trigger_label=trigger_label, use_monitoring=use_monitoring, run_event_counts=run_event_counts)
+        plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_trig, freqs, upward_channels, downward_channels, other_debug_plots, run_label, trigger_label=trigger_label, use_monitoring=use_monitoring, run_event_counts=run_event_counts, daq_type=digitizer_type)
         # Deep spectrum (unnormalized)
-        plot_time_integrated_deep_spectra(station_id, spec_arr_trig, freqs, vpol_channels, hpol_channels, other_debug_plots, run_label, trigger_label=trigger_label, use_monitoring=use_monitoring, run_event_counts=run_event_counts)
+        plot_time_integrated_deep_spectra(station_id, spec_arr_trig, freqs, vpol_channels, hpol_channels, other_debug_plots, run_label, trigger_label=trigger_label, use_monitoring=use_monitoring, run_event_counts=run_event_counts, daq_type=digitizer_type)
 
     # RMS
     plot_vrms_values_against_time(times, rms_arr, all_channels, station_id, run_label, other_debug_plots, force_mask, radiant0_mask, radiant1_mask, lt_mask, daq_type=digitizer_type, n_rows=12, n_cols=2, day_interval=day_interval, use_monitoring=use_monitoring)

@@ -38,6 +38,8 @@
     "didaq_bits" : {
         "DIDAQ_DEEP_PHASED": 8,
         "DIDAQ_SURF_UP": 16,
-        "DIDAQ_SURF_DOWN": 32
+        "DIDAQ_SURF_DOWN": 32,
+        "DIDAQ_COINC0": 64,
+        "DIDAQ_COINC1": 128
     }
 }

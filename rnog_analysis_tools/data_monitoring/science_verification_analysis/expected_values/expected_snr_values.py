@@ -14,6 +14,7 @@ EXPECTED_VALUES_DIR_REF = os.path.join(SCRIPT_DIR_REF, "expected_snr")
 PLOTS_DIR_REF = os.path.join(SCRIPT_DIR_REF, "plots_reference", "snr")
 LOGS_DIR_REF = os.path.join(SCRIPT_DIR_REF, "logs_reference", "snr")
 RESULTS_DIR_REF = os.path.join(SCRIPT_DIR_REF, "results_reference", "snr")
+
 os.makedirs(PLOTS_DIR_REF, exist_ok=True)
 os.makedirs(LOGS_DIR_REF, exist_ok=True)
 os.makedirs(RESULTS_DIR_REF, exist_ok=True)
@@ -26,8 +27,6 @@ sys.path.insert(0, PARENT_DIR)
 from analysis_functions_sva.z_score_analysis_sva import calculate_statistics_log_paramater, calculate_z_score_parameter, symmetry_metrics_channel_z_score, symmetry_metrics_z_score, find_k_value, save_values_json, load_values_json, outlier_flag, find_outlier_details
 from plotting_functions_sva.plotting_sva_snr import choose_day_interval, plot_snr_against_time
 from helper_functions.read_rnog_runtable import read_rnog_runtable
-from sva_dataproviderrnog.read_rnog_data_nuradio import read_rnog_data
-from sva_dataproviderrnog.science_verification_analysis_dataprovider import choose_trigger_type
 from monitoring_data_functions_sva.get_monitoring_data_uproot import read_multiple_runs, choose_trigger_type_header
 from helper_functions.output_writer import write_snr_outlier_details, write_failed_runs_to_csv
 from helper_functions.config_helper import get_station_config
@@ -79,6 +78,7 @@ if __name__ == "__main__":
     argparser.add_argument("-st", "--station_id", type=int, required=True, help="Station to analyze, e.g --station_id 14")
     argparser.add_argument("-ex", "--exclude-runs", nargs="+", type=int, default=[], metavar="RUN", help="Run number(s) to exclude, e.g. --exclude-runs 1005 1010")
     argparser.add_argument("--save-values", action="store_true", help="Whether to save the calculated reference values as JSON files in the script directory, e.g. --save-values")
+    argparser.add_argument("--data_location", type=str, default="desy", help="Location of the data. Use 'desy' (inbox data), 'uchicago' (mirrored data) or provide a custom path to the data directory, e.g. --data_location /path/to/data")
     
     run_selection = argparser.add_mutually_exclusive_group(required=True)
     run_selection.add_argument("--runs", nargs="+", type=int, metavar="RUN_NUMBERS",
@@ -89,10 +89,6 @@ if __name__ == "__main__":
                             help="Date range to analyze (inclusive). Provide start and end dates separated by a space in YYYY-MM-DD format, e.g. --time_range 2024-07-15 2024-09-30")
 
     args = argparser.parse_args()
-
-    base_data_path = "/pnfs/ifh.de/acs/radio/diskonly/data/inbox/"
-
-    logger.info("Using monitoring method to read data")
 
     station_id = args.station_id
    
@@ -123,6 +119,19 @@ if __name__ == "__main__":
 
     setup_logging(station_id, run_label)
 
+    logger.info("Using monitoring method to read data")
+
+    # Choose the data location based on the argument provided
+    if args.data_location == "desy":
+        logger.info("Using DESY inbox data location for the analysis.")
+        base_data_path = "/pnfs/ifh.de/acs/radio/diskonly/data/inbox/"
+    elif args.data_location == "uchicago":
+        logger.info("Using UChicago mirrored data location for the analysis.")
+        base_data_path = "/data/satellite"
+    else:
+        logger.info(f"Using custom data location {args.data_location} for the analysis.")
+        base_data_path = args.data_location
+
     # Get channel lists from config
     station_config_json = os.path.join(CONFIG_DIR, "config_station.json")
     with open(station_config_json, "r") as f:
@@ -133,8 +142,14 @@ if __name__ == "__main__":
     config = get_station_config(station_id, default_station_config, station_specific_adjustments)
 
     all_channels = config["all_channels"]
-    
-    combined_event_info = read_multiple_runs(base_path = base_data_path, station_id = station_id, run_numbers=run_numbers)
+
+    # Choose RADIANT or DIDAQ based on the station configuration (FORCE trigger name is the same for both)
+    digitizer_type = config["daq_type"]
+    if digitizer_type not in ["radiant", "didaq"]:
+        logger.error(f"Invalid daq_type {digitizer_type}. Must be either 'radiant' or 'didaq'.")
+        raise ValueError(f"Invalid daq_type {digitizer_type}. Must be either 'radiant' or 'didaq'. Please check the station configuration in config_station.json.")
+
+    combined_event_info = read_multiple_runs(base_path = base_data_path, station_id = station_id, run_numbers=run_numbers, daq_type=digitizer_type)
     snr_arr = combined_event_info["snr_arr"] 
     trigger_type_arr = combined_event_info["triggerType"]
     times = combined_event_info["trigger_time_utc"]
@@ -143,7 +158,7 @@ if __name__ == "__main__":
     failed_run_info = combined_event_info["failed_run_info"] or {}
     failed_runs = list(failed_run_info.keys())
 
-    force_mask = choose_trigger_type_header(trigger_type_arr, "FORCE")
+    force_mask = choose_trigger_type_header(trigger_type_arr, "FORCE", digitizer_type)
     run_no_force = run_no[force_mask]
     event_number_force = event_number_arr[force_mask]
     

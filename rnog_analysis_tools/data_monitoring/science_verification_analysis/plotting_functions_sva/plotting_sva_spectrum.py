@@ -18,16 +18,17 @@ TRIGGER_MAP = {
 
 TRIGGER_MAP_DIDAQ = {
     "force" : "n_forced_triggers",
-    "deep_phased" : "n_lt_triggers",
-    "surf_up" : "n_rf0_triggers",
-    "surf_down" : "n_rf1_triggers",
+    "didaq_deep_phased" : "n_lt_triggers",
+    "didaq_surf_up" : "n_rf0_triggers",
+    "didaq_surf_down" : "n_rf1_triggers",
 }
 
 
-def get_weights_if_monitoring(trigger_label, use_monitoring=False, run_event_counts=None):
+def get_weights_if_monitoring(trigger_label, use_monitoring=False, run_event_counts=None, daq_type="radiant"):
     '''Helper function to get weights for averaging spectra if using monitoring data, otherwise return None.'''
     if use_monitoring and run_event_counts is not None:
-        weight_key = TRIGGER_MAP[trigger_label.lower()]
+        trigger_map = TRIGGER_MAP_DIDAQ if daq_type == "didaq" else TRIGGER_MAP
+        weight_key = trigger_map[trigger_label.lower()]
         n_events_per_run_trigger = np.array([run_event_counts[run_no][weight_key] for run_no in run_event_counts])
         unit_label = "ADC Counts"
         return n_events_per_run_trigger, unit_label
@@ -36,11 +37,11 @@ def get_weights_if_monitoring(trigger_label, use_monitoring=False, run_event_cou
         return None, unit_label
 
 #### Spectrum Plots ####
-def plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label, use_monitoring = False, run_event_counts = None):
+def plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label, use_monitoring = False, run_event_counts = None, daq_type="radiant"):
     '''Plot time-integrated surface channel spectra. Use weighted average if use_monitoring is True and run_event_counts is provided, otherwise use simple average.'''
 
     plt.figure(figsize=(10, 6))
-    weights, unit_label = get_weights_if_monitoring(trigger_label, use_monitoring, run_event_counts)
+    weights, unit_label = get_weights_if_monitoring(trigger_label, use_monitoring, run_event_counts, daq_type)
     #print(f"shape of spec_arr: {spec_arr.shape}, shape of freqs: {freqs.shape}")
     for ch in upward_channels:
         if weights is not None:
@@ -139,10 +140,10 @@ def plot_time_integrated_surface_spectra_normalized(station_id, norm_spec_arr, f
     plt.savefig(os.path.join(save_location, f"time_integrated_surface_spectra_normalized_force_trigger_{station_id}_{run_label}.pdf"))
     plt.close()
 
-def plot_time_integrated_deep_spectra(station_id, spec_arr, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label, use_monitoring = False, run_event_counts = None):
+def plot_time_integrated_deep_spectra(station_id, spec_arr, freqs, vpol_channels, hpol_channels, save_location, run_label, trigger_label, use_monitoring = False, run_event_counts = None, daq_type="radiant"):
     '''Plot time-integrated deep channel spectra. Use weighted average if use_monitoring is True and run_event_counts is provided, otherwise use simple average.'''
     plt.figure(figsize=(10, 6))
-    weights, unit_label = get_weights_if_monitoring(trigger_label, use_monitoring, run_event_counts)
+    weights, unit_label = get_weights_if_monitoring(trigger_label, use_monitoring, run_event_counts, daq_type)
     for ch in vpol_channels:
         if weights is not None:
             spec_mean = np.average(spec_arr[ch, :, :], axis=0, weights=weights)
