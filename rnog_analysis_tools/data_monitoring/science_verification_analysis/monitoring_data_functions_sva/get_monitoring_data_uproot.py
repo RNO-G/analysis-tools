@@ -41,7 +41,7 @@ def get_event_info_from_monitoring_file(file, daq_type):
         rms_arr = stack_if_object(EventSummary["rms"])
         max_abs_amplitude_arr = stack_if_object(EventSummary["max_abs_amplitude"])
 
-        if daq_type == "didaq":
+        if daq_type == "radiant":
             glitching_ts_arr = stack_if_object(EventSummary["glitching_test_statitic"]) # There is typo in the monitoring.root for glitch ts
             block_offsets_arr = stack_if_object(EventSummary["block_offset"])
 
@@ -52,7 +52,7 @@ def get_event_info_from_monitoring_file(file, daq_type):
                 "glitching_test_statistic_arr": glitching_ts_arr.T, # (n_ch, n_events)
                 "block_offsets_arr": block_offsets_arr.T # (n_ch, n_events)
             }
-        elif daq_type == "radiant": # no glitching test statistic or block offsets for radiant
+        elif daq_type == "didaq": # no glitching test statistic or block offsets for didaq
             return {
                 "event_number_arr": event_number_arr, # (n_events,)
                 "rms_arr": rms_arr.T, # (n_ch, n_events)
@@ -292,11 +292,16 @@ def calculate_snr(max_abs_amplitude_arr, rms_arr):
 
     return snr_arr
 
-def choose_trigger_type_header(trigger_type_arr, trigger_type:str):
+def choose_trigger_type_header(trigger_type_arr, trigger_type:str, daq_type:str):
     '''Choose events based on trigger type.'''
-    if trigger_type not in ["FORCE", "LT", "RADIANT0", "RADIANT1"]:
-        logger.error(f"Invalid trigger type {trigger_type}. Must be one of FORCE, LT, RADIANT0 or RADIANT1.")
-        return None
+    if daq_type == "didaq":
+        if trigger_type not in ["FORCE", "DIDAQ_DEEP_PHASED", "DIDAQ_SURF_UP", "DIDAQ_SURF_DOWN"]:
+            logger.error(f"Invalid trigger type {trigger_type}. Must be one of FORCE, DIDAQ_DEEP_PHASED, DIDAQ_SURF_UP or DIDAQ_SURF_DOWN.")
+            return None
+    elif daq_type == "radiant":
+        if trigger_type not in ["FORCE", "LT", "RADIANT0", "RADIANT1"]:
+            logger.error(f"Invalid trigger type {trigger_type}. Must be one of FORCE, LT, RADIANT0 or RADIANT1.")
+            return None
     
     mask = trigger_type_arr == trigger_type
     return mask
@@ -545,9 +550,9 @@ def read_multiple_runs(base_path, station_id, run_numbers, daq_type):
             run_event_counts[run_no] = {
                 "n_events": run_summary_dict["n_events"],
                 "n_forced_triggers": run_summary_dict["n_forced_triggers"],
-                "n_didaq_deep_phased_triggers": run_summary_dict["n_didaq_deep_phased_triggers"],
-                "n_didaq_surf_up_triggers": run_summary_dict["n_didaq_surf_up_triggers"],
-                "n_didaq_surf_down_triggers": run_summary_dict["n_didaq_surf_down_triggers"],
+                "n_lt_triggers": run_summary_dict["n_didaq_deep_phased_triggers"],
+                "n_rf0_triggers": run_summary_dict["n_didaq_surf_up_triggers"],
+                "n_rf1_triggers": run_summary_dict["n_didaq_surf_down_triggers"],
             }
 
         

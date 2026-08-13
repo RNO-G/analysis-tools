@@ -33,7 +33,7 @@ def choose_day_interval(times):
     else:
         return 60
     
-def plot_vrms_values_against_time(times, vrms_arr_all, channel_list, station_id, run_label, save_location, force_mask, radiant0_mask, radiant1_mask, lt_mask, n_rows = 12, n_cols = 2, day_interval=None, use_monitoring=False):
+def plot_vrms_values_against_time(times, vrms_arr_all, channel_list, station_id, run_label, save_location, force_mask, radiant0_mask, radiant1_mask, lt_mask, daq_type, n_rows = 12, n_cols = 2, day_interval=None, use_monitoring=False):
     '''Plot RMS (for monitoring.root) or Vrms (for dataProviderRNOG) distributions for different trigger types.'''
     if use_monitoring:
         unit_label = "RMS [ADC]"
@@ -42,16 +42,26 @@ def plot_vrms_values_against_time(times, vrms_arr_all, channel_list, station_id,
         unit_label = r"$V_\mathrm{rms}$ [V]"
         plot_label = "Vrms"
 
-    trigger_masks = {"FORCE": force_mask, 
-                     "RADIANT0": radiant0_mask,
-                     "RADIANT1": radiant1_mask,
-                     "LT": lt_mask,}
-
-    trigger_colors = {"FORCE": "tab:blue", 
-                      "RADIANT0": "tab:orange",
-                      "RADIANT1": "tab:green",
-                      "LT": "tab:red",}
-
+    if daq_type == "didaq":
+        trigger_masks = {"FORCE": force_mask, 
+                         "DIDAQ_SURF_UP": radiant0_mask,
+                         "DIDAQ_SURF_DOWN": radiant1_mask,
+                         "DIDAQ_DEEP_PHASED": lt_mask,}
+        trigger_colors = {"FORCE": "tab:blue",
+                            "DIDAQ_SURF_UP": "tab:orange",
+                            "DIDAQ_SURF_DOWN": "tab:green",
+                            "DIDAQ_DEEP_PHASED": "tab:red",}
+        
+    elif daq_type == "radiant":
+        trigger_masks = {"FORCE": force_mask, 
+                         "RADIANT0": radiant0_mask,
+                         "RADIANT1": radiant1_mask,
+                         "LT": lt_mask,}
+        trigger_colors = {"FORCE": "tab:blue", 
+                          "RADIANT0": "tab:orange",
+                          "RADIANT1": "tab:green",
+                          "LT": "tab:red",}
+        
     times = np.asarray(times)
     vrms_arr_all = np.asarray(vrms_arr_all)
 
@@ -107,7 +117,7 @@ def plot_vrms_values_against_time(times, vrms_arr_all, channel_list, station_id,
     plt.savefig(os.path.join(save_location, f"{plot_label.lower()}_against_time_{station_id}_{run_label}.pdf"))
     plt.close(fig)
 
-def plot_vrms_values_against_time_per_trigger(times, vrms_arr_all, channel_list, station_id, run_label, save_location,force_mask, radiant0_mask, radiant1_mask, lt_mask, n_rows=12, n_cols=2, day_interval=None, use_monitoring=False):
+def plot_vrms_values_against_time_per_trigger(times, vrms_arr_all, channel_list, station_id, run_label, save_location,force_mask, radiant0_mask, radiant1_mask, lt_mask, daq_type, n_rows=12, n_cols=2, day_interval=None, use_monitoring=False):
     '''Plot RMS/Vrms against time separately for each trigger type.'''
 
     if use_monitoring:
@@ -117,19 +127,25 @@ def plot_vrms_values_against_time_per_trigger(times, vrms_arr_all, channel_list,
         unit_label = r"$V_\mathrm{rms}$ [V]"
         plot_label = "vrms"
 
-    trigger_masks = {
-        "FORCE": force_mask,
-        "RADIANT0": radiant0_mask,
-        "RADIANT1": radiant1_mask,
-        "LT": lt_mask,
-    }
-
-    trigger_colors = {
-        "FORCE": "tab:blue",
-        "RADIANT0": "tab:orange",
-        "RADIANT1": "tab:green",
-        "LT": "tab:red",
-    }
+    if daq_type == "didaq":
+        trigger_masks = {"FORCE": force_mask, 
+                            "DIDAQ_SURF_UP": radiant0_mask,
+                            "DIDAQ_SURF_DOWN": radiant1_mask,
+                            "DIDAQ_DEEP_PHASED": lt_mask,}
+        trigger_colors = {"FORCE": "tab:blue",
+                            "DIDAQ_SURF_UP": "tab:orange",
+                            "DIDAQ_SURF_DOWN": "tab:green",
+                            "DIDAQ_DEEP_PHASED": "tab:red",}
+        
+    elif daq_type == "radiant":
+        trigger_masks = {"FORCE": force_mask, 
+                            "RADIANT0": radiant0_mask,
+                            "RADIANT1": radiant1_mask,
+                            "LT": lt_mask,}
+        trigger_colors = {"FORCE": "tab:blue", 
+                            "RADIANT0": "tab:orange",
+                            "RADIANT1": "tab:green",
+                            "LT": "tab:red",}
 
     times = np.asarray(times)
     vrms_arr_all = np.asarray(vrms_arr_all)

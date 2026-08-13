@@ -15,20 +15,23 @@ def write_failed_runs_to_csv(station_id, failed_run_info, run_label, results_dir
             writer.writerow([run_no, reason])
     logger.warning(f"Failed to process some runs for station {station_id}: {list(failed_run_info.keys())}. Information about these runs has been written to {failed_runs_file} in the {results_dir} directory. Please check the file for details as this might indicate potential issues!")
 
-def write_spectral_results(ch, excess_info_results, station_id, run_label, results_dir, log_once = False, reset_file = False):
+def write_spectral_results(all_excess_info, channels, station_id, run_label, results_dir):
+    # dCache/pnfs enforces write-once semantics: a file can only be opened for
+    # writing once, so all channels must be written in a single open() call.
     spectral_results_file = os.path.join(results_dir, f"spectral_analysis_results_{station_id}_{run_label}.txt")
-    if reset_file:
-        open(spectral_results_file, "w").close()  
-    
-    with open(spectral_results_file, "a") as f:
-        f.write(f"Channel {ch:02d}:\n")
-        for band, results in excess_info_results.items():
-            f.write(f"\n=== {band} ===\n")
+
+    content = ""
+    for ch in channels:
+        content += f"Channel {ch:02d}:\n"
+        for band, results in all_excess_info[ch].items():
+            content += f"\n=== {band} ===\n"
             for key, value in results.items():
-                f.write(f"{key}: {value}\n")
-        f.write("\n")
-    if log_once:
-        logger.info(f"Spectral analysis results written to {spectral_results_file}")
+                content += f"{key}: {value}\n"
+        content += "\n"
+
+    with open(spectral_results_file, "w") as f:
+        f.write(content)
+    logger.info(f"Spectral analysis results written to {spectral_results_file}")
 
 def write_snr_outlier_details(outlier_details, station_id, run_label, n_events_force, results_dir):
     outlier_results_file = os.path.join(results_dir, f"force_snr_details_{station_id}_{run_label}.txt")

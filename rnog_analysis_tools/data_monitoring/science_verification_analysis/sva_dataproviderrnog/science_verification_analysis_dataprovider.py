@@ -280,8 +280,8 @@ if __name__ == "__main__":
         all_excess_info[ch] = excess_info_results
         all_validation_results[ch] = validation_results
 
-        # Write detailed spectral results to text file for each channel
-        write_spectral_results(ch, excess_info_results, station_id, run_label, results_dir=RESULTS_DIR, log_once=(ch==surface_channels[-1]), reset_file=(ch==surface_channels[0]))    
+    # Write detailed spectral results for all channels in a single write (dCache/pnfs is write-once)
+    write_spectral_results(all_excess_info, surface_channels, station_id, run_label, results_dir=RESULTS_DIR)
 
     # Surface spectrum
     plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_force, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label="force", use_monitoring = use_monitoring, run_event_counts = run_event_counts)

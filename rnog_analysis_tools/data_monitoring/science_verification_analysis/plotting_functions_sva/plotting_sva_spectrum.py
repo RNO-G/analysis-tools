@@ -16,6 +16,14 @@ TRIGGER_MAP = {
     "radiant1" : "n_rf1_triggers",
 }
 
+TRIGGER_MAP_DIDAQ = {
+    "force" : "n_forced_triggers",
+    "deep_phased" : "n_lt_triggers",
+    "surf_up" : "n_rf0_triggers",
+    "surf_down" : "n_rf1_triggers",
+}
+
+
 def get_weights_if_monitoring(trigger_label, use_monitoring=False, run_event_counts=None):
     '''Helper function to get weights for averaging spectra if using monitoring data, otherwise return None.'''
     if use_monitoring and run_event_counts is not None:
@@ -30,7 +38,7 @@ def get_weights_if_monitoring(trigger_label, use_monitoring=False, run_event_cou
 #### Spectrum Plots ####
 def plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr, freqs, upward_channels, downward_channels, save_location, run_label, trigger_label, use_monitoring = False, run_event_counts = None):
     '''Plot time-integrated surface channel spectra. Use weighted average if use_monitoring is True and run_event_counts is provided, otherwise use simple average.'''
-    print(f"shape of spec_arr: {spec_arr.shape}, shape of freqs: {freqs.shape} [INSIDE FUNCTION]")
+
     plt.figure(figsize=(10, 6))
     weights, unit_label = get_weights_if_monitoring(trigger_label, use_monitoring, run_event_counts)
     #print(f"shape of spec_arr: {spec_arr.shape}, shape of freqs: {freqs.shape}")

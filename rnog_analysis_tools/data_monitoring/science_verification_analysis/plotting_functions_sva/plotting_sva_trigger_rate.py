@@ -9,20 +9,37 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-trigger_label_mapping = {
+TRIGGER_LABEL_MAPPING_RADIANT = {
     "force_trigger_rate": "FORCE",
     "lt_trigger_rate": "LT",
     "rf0_trigger_rate": "RADIANT0",
     "rf1_trigger_rate": "RADIANT1"
 }
 
-def plot_trigger_rates_over_time(run_trigger_rates, save_location, station_id, run_label):
+TRIGGER_LABEL_MAPPING_DIDAQ = {
+    "force_trigger_rate": "FORCE",
+    "lt_trigger_rate": "DIDAQ_DEEP_PHASED",
+    "rf0_trigger_rate": "DIDAQ_SURF_UP",
+    "rf1_trigger_rate": "DIDAQ_SURF_DOWN"
+}
+
+def plot_trigger_rates_over_time(run_trigger_rates, save_location, station_id, run_label, daq_type):
     '''Plot trigger rates over time for different trigger types.'''
 
     fig, ax = plt.subplots(figsize=(10, 6))
 
+    if daq_type == "didaq":
+        trigger_label_mapping = TRIGGER_LABEL_MAPPING_DIDAQ
+
+    elif daq_type == "radiant":
+        trigger_label_mapping = TRIGGER_LABEL_MAPPING_RADIANT
+
+    else:
+        raise ValueError(f"Unsupported daq_type: {daq_type}")
+
     trigger_types = [trigger for trigger in trigger_label_mapping.keys()]
     trigger_labels = [trigger_label_mapping[trigger] for trigger in trigger_types]
+    print(f"Trigger types: {trigger_types}, Trigger labels: {trigger_labels}")
 
     run_numbers = sorted(run_trigger_rates.keys())
     times = [run_trigger_rates[run_no]["run_start_time_utc"] for run_no in run_numbers]
@@ -52,8 +69,18 @@ def plot_trigger_rates_over_time(run_trigger_rates, save_location, station_id, r
     fig.savefig(os.path.join(save_location, f"trigger_rates_over_time_{station_id}_{run_label}.pdf"))
     plt.close(fig)
 
-def plot_trigger_rate_heatmap(run_trigger_rates, save_location, station_id, run_label):
+def plot_trigger_rate_heatmap(run_trigger_rates, save_location, station_id, run_label, daq_type):
     '''Plot trigger rates as heatmap (run vs trigger type).'''
+
+    if daq_type == "didaq":
+        trigger_label_mapping = TRIGGER_LABEL_MAPPING_DIDAQ
+
+    elif daq_type == "radiant":
+        trigger_label_mapping = TRIGGER_LABEL_MAPPING_RADIANT
+
+    else:
+        raise ValueError(f"Unsupported daq_type: {daq_type}")
+
     trigger_types = [trigger for trigger in trigger_label_mapping.keys()]
     trigger_labels = [trigger_label_mapping[trigger] for trigger in trigger_types]
 
