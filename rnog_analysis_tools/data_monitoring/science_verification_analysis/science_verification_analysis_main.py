@@ -31,7 +31,7 @@ from analysis_functions_sva.block_offsets_analysis_sva_monitoring import get_for
 from analysis_functions_sva.vrms_stability_analysis_sva import get_rms_per_run, relative_median_shift, decision_metric
 
 # Import helper functions
-from helper_functions.output_writer import write_failed_runs_to_csv, write_spectral_results, write_snr_outlier_details, write_vrms_outlier_details, write_vrms_modality_results, write_glitching_results, write_block_offset_results, create_result_csv_file, create_result_csv_file_didaq
+from helper_functions.output_writer import write_failed_runs_to_csv, write_spectral_results, write_snr_outlier_details, write_vrms_outlier_details, write_vrms_modality_results, write_glitching_results, write_block_offset_results, block_offset_channel_health, create_result_csv_file, create_result_csv_file_didaq, write_readme_for_shifters
 from helper_functions.read_rnog_runtable import read_rnog_runtable
 from helper_functions.config_helper import get_station_config
 
@@ -69,15 +69,25 @@ def setup_logging(station_id, run_label, LOGS_DIR):
 
     logger.info(f"Logging to {log_file}")
 
-def debug_check(validation_arr, label, *plot_fns, note=""):
+def failed_check_plot(validation_arr, label, *plot_fns, note=""):
         """Log pass/fail for a channel-health test and run plot_fns(save_dir), routing to
-        failed_test_plots on failure or other_debug_plots otherwise."""
+        failed_test_plots on failure or detailed_plots otherwise."""
         failed = validation_arr.isin(["X", "!!"]).any()
-        save_dir = failed_test_plots if failed else other_debug_plots
+        save_dir = failed_test_plots if failed else detailed_plots
         status = "Some channels failed" if failed else "All channels passed"
-        (logger.warning if failed else logger.info)(f"{status} the {label}.{note} Debug plots saved in {save_dir}.")
+        (logger.warning if failed else logger.info)(f"{status} the {label}.{note} Detailed plots saved in {save_dir}.")
         for plot_fn in plot_fns:
             plot_fn(save_dir)
+
+def failed_check_report(validation_arr, label, *report_fns, note=""):
+        """Log pass/fail for a channel-health test and run report_fns(save_dir), routing to
+        failed_test_results on failure or detailed_results otherwise."""
+        failed = validation_arr.isin(["X", "!!"]).any()
+        save_dir = failed_test_results_dir if failed else detailed_results_dir
+        status = "Some channels failed" if failed else "All channels passed"
+        (logger.warning if failed else logger.info)(f"{status} the {label}.{note} Detailed results saved in {save_dir}.")
+        for report_fn in report_fns:
+            report_fn(save_dir)
 
 if __name__ == "__main__":
 
@@ -147,7 +157,9 @@ if __name__ == "__main__":
     else:
         logger.info(f"Using custom data location {args.data_location} for the analysis.")
         base_data_path = args.data_location
-        result_base_data_path = os.path.join(args.data_location, "results")
+        #result_base_data_path = os.path.join(args.data_location, "results")
+        result_base_data_path = "/pnfs/ifh.de/acs/radio/diskonly/NuRadioMC/science_verification_analysis"
+        
         
 
     result_save_location = os.path.join(result_base_data_path, save_directory_label)
@@ -157,7 +169,7 @@ if __name__ == "__main__":
 
     # Output directories for plots, results, and logs
     save_location = os.path.join(result_save_location, "plots")
-    results_dir = os.path.join(result_save_location, "detailed_results")
+    results_dir = os.path.join(result_save_location, "test_results")
     csv_dir = os.path.join(result_save_location, "channel_health_summary")
     logs_dir = os.path.join(result_save_location, "logs")
 
@@ -167,15 +179,34 @@ if __name__ == "__main__":
     os.makedirs(csv_dir, exist_ok=True)
     os.makedirs(logs_dir, exist_ok=True)
 
-    # Plot directories
+    # Path to README for shifters
+    shifters_readme_file = os.path.join(result_save_location, "README_shifters.txt")
+
+    ## Results directories
+    # Always save results, even if all channels pass the tests
+    detailed_results_dir = os.path.join(results_dir, "detailed_results")
+    os.makedirs(detailed_results_dir, exist_ok=True)
+
+    # Save  only if some channels fail the tests
+    failed_test_results_dir = os.path.join(results_dir, "failed_test_results")
+    os.makedirs(failed_test_results_dir, exist_ok=True)
+
+    ## Plot directories
+    # Plot always
     standard_plots = os.path.join(save_location, "standard_plots")
     os.makedirs(standard_plots, exist_ok=True)
 
+    # Plot only if some channels fail the tests
     failed_test_plots = os.path.join(save_location, "failed_test_plots")
     os.makedirs(failed_test_plots, exist_ok=True)
 
-    other_debug_plots = os.path.join(save_location, "other_debug_plots")
-    os.makedirs(other_debug_plots, exist_ok=True)
+    # Debug plots, e.g. heatmaps
+    debug_plots = os.path.join(save_location, "debug_plots")
+    os.makedirs(debug_plots, exist_ok=True)
+
+    # Detailed plots, e.g. per channel plots (failed plots will be saved here if no channels fail the tests)
+    detailed_plots = os.path.join(save_location, "detailed_plots")
+    os.makedirs(detailed_plots, exist_ok=True)
 
     # Start logging
     setup_logging(station_id, run_label, logs_dir)
@@ -249,7 +280,7 @@ if __name__ == "__main__":
             failed_run_info[int(excluded_run)] = "Run excluded by user"
 
     if failed_run_info:
-        write_failed_runs_to_csv(station_id, failed_run_info, run_label, results_dir=results_dir)
+        write_failed_runs_to_csv(station_id, failed_run_info, run_label, results_dir=results_dir) # Save in the results directory, since always important
 
     n_events_force = combined_event_info["total_n_force_triggers"]
     n_lt_events = combined_event_info["total_n_lt_triggers"] # DIDAQ_DEEP_PHASED for DIDAQ, LT for RADIANT
@@ -343,9 +374,6 @@ if __name__ == "__main__":
         all_excess_info[ch] = excess_info_results
         all_validation_results[ch] = validation_results
 
-    # Write detailed spectral results for all channels in a single write (dCache/pnfs is write-once)
-    write_spectral_results(all_excess_info, surface_channels, station_id, run_label, results_dir=results_dir)
-
     ###### SNR analysis
     logger.info("Starting SNR analysis for FORCE trigger events...")
     snr_arr_force = snr_arr[:, force_mask]
@@ -359,8 +387,7 @@ if __name__ == "__main__":
     flag_outliers_snr = outlier_flag(z_score_arr_log_snr, k_values_log_snr, all_channels)
 
     outlier_details_snr = find_outlier_details(z_score_arr_log_snr, k_values_log_snr, flag_outliers_snr, all_channels, run_no_force, event_number_force)
-    write_snr_outlier_details(outlier_details_snr, station_id, run_label, n_events_force, results_dir=results_dir)
-
+    
     ##### Vrms analysis
     logger.info("Starting Vrms analysis for monitoring data...")
     
@@ -402,13 +429,6 @@ if __name__ == "__main__":
         logger.warning(f"{trigger_types_daq['lt']} trigger has less than 100 valid RMS entries ({len(rms_arr_lt[1])}). Results for the Vrms statistics may be unreliable.")
 
     modality_lt, tail_label_lt = report_vrms_characteristics(modality_dict_lt, tail_dict_lt, all_channels, report_config=report_vrms_function_parameters)
-    
-    # Write detailed Vrms modality results to text files for each trigger type
-    
-    write_vrms_modality_results(modality_force, tail_label_force, trigger_label=trigger_types_daq['force'], station_id=station_id, run_label=run_label, results_dir=results_dir, use_monitoring=use_monitoring)
-    write_vrms_modality_results(modality_radiant0, tail_label_radiant0, trigger_label=trigger_types_daq['radiant0'], station_id=station_id, run_label=run_label, results_dir=results_dir, use_monitoring=use_monitoring)
-    write_vrms_modality_results(modality_radiant1, tail_label_radiant1, trigger_label=trigger_types_daq['radiant1'], station_id=station_id, run_label=run_label, results_dir=results_dir, use_monitoring=use_monitoring)
-    write_vrms_modality_results(modality_lt, tail_label_lt, trigger_label=trigger_types_daq['lt'], station_id=station_id, run_label=run_label, results_dir=results_dir, use_monitoring=use_monitoring)
 
     ## Vrms stability
     reference_filename_rms = f"expected_{rms_label}/expected_{rms_label}_station{station_id}.json"
@@ -417,16 +437,10 @@ if __name__ == "__main__":
     flag_outliers_vrms_force = outlier_flag(z_score_arr_vrms_force, vrms_k_values, all_channels)
     outlier_details_vrms_force = find_outlier_details(z_score_arr_vrms_force, vrms_k_values, flag_outliers_vrms_force, channel_list=all_channels, run_no=run_no_force, event_number=event_number_force)
 
-    write_vrms_outlier_details(outlier_details_vrms_force, station_id, run_label, trigger_label="FORCE", n_events=n_events_force, results_dir=results_dir, use_monitoring=use_monitoring)
-    
     rms_arr_per_run_dict_force = get_rms_per_run(rms_arr_force, run_no_force)
     relative_median_shift_results = relative_median_shift(rms_arr_per_run_dict_force, all_channels)
-    with open(os.path.join(results_dir, f"{rms_label}_relative_median_shift_results_force_trigger_station{station_id}_{run_label}.json"), "w") as f:
-        json.dump(relative_median_shift_results, f, indent=4)
-
+    
     rms_results = decision_metric(outlier_details_vrms_force, relative_median_shift_results, n_events_force=n_events_force, channels=all_channels)
-    with open(os.path.join(results_dir, f"rms_stability_decision_results_force_trigger_station{station_id}_{run_label}.json"), "w") as f:
-        json.dump(rms_results, f, indent=4)
 
     ##### Glitching and block offset analysis - only for RADIANT digitizer type
     if digitizer_type == "radiant":
@@ -441,8 +455,7 @@ if __name__ == "__main__":
         config_glitching = glitching_config_dict["config_glitching_values"]
 
         glitch_info = binomtest_glitch_fraction(glitch_arr, all_channels, config_glitching=config_glitching)
-        write_glitching_results(glitch_info, station_id, run_label, all_channels, results_dir=results_dir)
-        
+
         ##### Block offsets analysis
         # Get the reference block offset results for the station
         ref_block_offset_results_file = os.path.join(REFERENCE_DIR, "expected_block_offsets", f"expected_block_offsets_station{station_id}.json")
@@ -453,7 +466,7 @@ if __name__ == "__main__":
         block_offset_arr_force = get_force_block_offsets_monitoring(block_offsets_arr, force_mask)
         block_offset_stats = block_offset_statistics_monitoring(block_offset_arr_force=block_offset_arr_force, channel_list=all_channels)
 
-        block_offset_results_dict = write_block_offset_results(block_offset_stats, station_id, run_label, ref_block_off_dict=ref_block_offset_results, results_dir=results_dir, use_monitoring=use_monitoring)
+        block_offset_results_dict = block_offset_channel_health(block_offset_stats, ref_block_off_dict=ref_block_offset_results, use_monitoring=use_monitoring)
 
 
     # Create summary CSV file
@@ -512,6 +525,7 @@ if __name__ == "__main__":
     rms_stability_validation_arr = results_df[f"{rms_label.capitalize()} Stability (FORCE)"]
     rms_modality_force_validation_arr = results_df[f"{rms_label.capitalize()} (FORCE)"]
 
+
     #### Plotting ####
 
     #### Standard plots for the analysis results
@@ -529,17 +543,29 @@ if __name__ == "__main__":
     # Trigger rate plots over time for all trigger types
     plot_trigger_rates_over_time(run_trigger_rates, standard_plots, station_id, run_label, daq_type = digitizer_type)
 
-    #### Debug plots for the analysis results, routed by pass/fail status of each test
-    debug_check(snr_validation_arr, "SNR test",
+    #### Debug plots/reports for the analysis results, routed by pass/fail status of each test
+    # SNR test: plot SNR distribution and z-score distribution, write outlier details to text file
+    failed_check_plot(snr_validation_arr, "SNR test",
         lambda d: debug_plot_snr_distribution(log_snr_arr, channel_list=all_channels, save_location=d, station_id=station_id, run_label=run_label, bins=30),
         lambda d: debug_plot_z_score_snr(z_score_arr_log_snr, channel_list=all_channels, save_location=d, station_id=station_id, run_label=run_label, bins=30))
 
-    debug_check(galaxy_validation_arr, "Galaxy test for FORCE trigger",
+    failed_check_report(snr_validation_arr, "SNR test",
+        lambda d: write_snr_outlier_details(outlier_details_snr, station_id, run_label, n_events_force, results_dir=d))
+
+    # Galaxy test: plot ratios for each channel, write spectral results to text file
+    failed_check_plot(galaxy_validation_arr, "Galaxy test for FORCE trigger",
         lambda d: debug_plot_ratios(ratio_arr_dict=ratio_arr_dict, channels_order=channels_order, save_location=d, station_id=station_id, run_label=run_label, bins=30))
 
-    debug_check(rms_stability_validation_arr, f"{rms_label} stability test for FORCE trigger",
-        lambda d: create_heatmap_plot(relative_median_shift_results, label="Relative Median Shift", save_dir=d, channel_list=all_channels, station_id=station_id, matrix_key="median_shift_matrix", run_label=run_label, cmap="Reds"))
+    failed_check_report(galaxy_validation_arr, "Galaxy test for FORCE trigger",
+        lambda d: write_spectral_results(all_excess_info, surface_channels, station_id, run_label, results_dir=d))
 
+    # RMS stability test: plot relative median shift heatmap, write results to text file
+    failed_check_report(rms_stability_validation_arr, "RMS stability test",
+        lambda d: write_vrms_outlier_details(outlier_details_vrms_force, station_id, run_label, trigger_label="FORCE", n_events=n_events_force, results_dir=d, use_monitoring=use_monitoring),
+        lambda d: (lambda f: json.dump(relative_median_shift_results, f, indent=4))(open(os.path.join(d, f"{rms_label}_relative_median_shift_results_force_trigger_station{station_id}_{run_label}.json"), "w")),
+        lambda d: (lambda f: json.dump(rms_results, f, indent=4))(open(os.path.join(d, f"rms_stability_decision_results_force_trigger_station{station_id}_{run_label}.json"), "w")))
+        
+    
     # RMS modality tests: FORCE is used for overall channel health, the others are informational only
     rms_modality_checks = [
         (rms_modality_force_validation_arr, "FORCE", rms_arr_force, modality_dict_force, ""),
@@ -548,33 +574,46 @@ if __name__ == "__main__":
         (rms_modality_radiant1_validation_arr, trigger_types_daq["radiant1"], rms_arr_radiant1, modality_dict_radiant1, " (isn't included in overall channel health but might indicate a problem)"),
     ]
     for validation_arr, trigger_label, rms_arr_trig, modality_dict, note in rms_modality_checks:
-        debug_check(validation_arr, f"{rms_label} modality test for {trigger_label} trigger",
+        failed_check_plot(validation_arr, f"{rms_label} modality test for {trigger_label} trigger",
             lambda d, rms_arr_trig=rms_arr_trig, modality_dict=modality_dict, trigger_label=trigger_label: debug_plot_vrms_distribution(rms_arr_trig, modality_dict, channel_list=all_channels, station_id=station_id, run_label=run_label, trigger_label=trigger_label, save_location=d, n_rows=12, n_cols=2, use_monitoring=use_monitoring),
             note=note)
 
+    failed_check_report(rms_modality_force_validation_arr, f"{rms_label} modality test for FORCE trigger",
+        lambda d: write_vrms_modality_results(modality_force, tail_label_force, trigger_label=trigger_types_daq['force'], station_id=station_id, run_label=run_label, results_dir=d, use_monitoring=use_monitoring),
+        lambda d: write_vrms_modality_results(modality_radiant0, tail_label_radiant0, trigger_label=trigger_types_daq['radiant0'], station_id=station_id, run_label=run_label, results_dir=d, use_monitoring=use_monitoring),
+        lambda d: write_vrms_modality_results(modality_radiant1, tail_label_radiant1, trigger_label=trigger_types_daq['radiant1'], station_id=station_id, run_label=run_label, results_dir=d, use_monitoring=use_monitoring),
+        lambda d: write_vrms_modality_results(modality_lt, tail_label_lt, trigger_label=trigger_types_daq['lt'], station_id=station_id, run_label=run_label, results_dir=d, use_monitoring=use_monitoring))
+ 
+
     if digitizer_type == "radiant":
-        debug_check(glitching_validation_arr, "glitching test",
+        failed_check_plot(glitching_validation_arr, "glitching test",
             lambda d: plot_glitch_q99_over_time(np.array(times), glitch_arr, all_channels, station_id, run_label, d),
             lambda d: glitching_violin_plot(glitch_arr, all_channels, station_id, run_label, d))
 
-        debug_check(block_offset_validation_arr, "block offset test",
+        failed_check_report(glitching_validation_arr, "glitching test",
+            lambda d: write_glitching_results(glitch_info, station_id, run_label, all_channels, results_dir=d))
+
+        failed_check_plot(block_offset_validation_arr, "block offset test",
             lambda d: plot_block_offsets_violin_monitoring(block_offset_arr_force, all_channels, station_id, run_label, d))
+
+        failed_check_report(block_offset_validation_arr, "block offset test",
+            lambda d: write_block_offset_results(block_offset_stats, station_id, run_label, ref_block_off_dict=ref_block_offset_results, results_dir=d, use_monitoring=use_monitoring))
 
     #### Other plots (always saved to other_debug_plots)
     for trig_key in ("lt", "radiant0", "radiant1"):
         spec_arr_trig = {"lt": spec_arr_lt, "radiant0": spec_arr_radiant0, "radiant1": spec_arr_radiant1}[trig_key]
         trigger_label = trigger_types_daq[trig_key]
         # Surface spectrum
-        plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_trig, freqs, upward_channels, downward_channels, other_debug_plots, run_label, trigger_label=trigger_label, use_monitoring=use_monitoring, run_event_counts=run_event_counts, daq_type=digitizer_type)
+        plot_time_integrated_surface_spectra_unnormalized(station_id, spec_arr_trig, freqs, upward_channels, downward_channels, detailed_plots, run_label, trigger_label=trigger_label, use_monitoring=use_monitoring, run_event_counts=run_event_counts, daq_type=digitizer_type)
         # Deep spectrum (unnormalized)
-        plot_time_integrated_deep_spectra(station_id, spec_arr_trig, freqs, vpol_channels, hpol_channels, other_debug_plots, run_label, trigger_label=trigger_label, use_monitoring=use_monitoring, run_event_counts=run_event_counts, daq_type=digitizer_type)
+        plot_time_integrated_deep_spectra(station_id, spec_arr_trig, freqs, vpol_channels, hpol_channels, detailed_plots, run_label, trigger_label=trigger_label, use_monitoring=use_monitoring, run_event_counts=run_event_counts, daq_type=digitizer_type)
 
     # RMS
-    plot_vrms_values_against_time(times, rms_arr, all_channels, station_id, run_label, other_debug_plots, force_mask, radiant0_mask, radiant1_mask, lt_mask, daq_type=digitizer_type, n_rows=12, n_cols=2, day_interval=day_interval, use_monitoring=use_monitoring)
-    plot_vrms_values_against_time_per_trigger(times, rms_arr, all_channels, station_id, run_label, other_debug_plots, force_mask, radiant0_mask, radiant1_mask, lt_mask, daq_type=digitizer_type, n_rows=12, n_cols=2, day_interval=day_interval, use_monitoring=use_monitoring)
+    plot_vrms_values_against_time(times, rms_arr, all_channels, station_id, run_label, detailed_plots, force_mask, radiant0_mask, radiant1_mask, lt_mask, daq_type=digitizer_type, n_rows=12, n_cols=2, day_interval=day_interval, use_monitoring=use_monitoring)
+    plot_vrms_values_against_time_per_trigger(times, rms_arr, all_channels, station_id, run_label, detailed_plots, force_mask, radiant0_mask, radiant1_mask, lt_mask, daq_type=digitizer_type, n_rows=12, n_cols=2, day_interval=day_interval, use_monitoring=use_monitoring)
 
     # Trigger rate plots
-    plot_trigger_rate_heatmap(run_trigger_rates, other_debug_plots, station_id, run_label, daq_type=digitizer_type)
+    plot_trigger_rate_heatmap(run_trigger_rates, detailed_plots, station_id, run_label, daq_type=digitizer_type)
 
     # SNR
     for times_trig, snr_arr_trig, color, trig_key in (
@@ -582,6 +621,16 @@ if __name__ == "__main__":
         (times_radiant1, snr_arr_radiant1, "tab:green", "radiant1"),
         (times_lt, snr_arr_lt, "tab:red", "lt"),
     ):
-        plot_snr_against_time_per_trigger(station_id, times_trig, snr_arr_trig, all_channels, other_debug_plots, run_label, nrows=12, ncols=2, day_interval=day_interval, color=color, triggerlabel=trigger_types_daq[trig_key])
+        plot_snr_against_time_per_trigger(station_id, times_trig, snr_arr_trig, all_channels, detailed_plots, run_label, nrows=12, ncols=2, day_interval=day_interval, color=color, triggerlabel=trigger_types_daq[trig_key])
 
-    logger.info(f"Analysis completed for station {station_id}, run label {run_label}. Results saved in {results_dir}. Standard plots saved in {standard_plots}. Debug plots saved in {other_debug_plots}. Plots for failed tests saved in {failed_test_plots}.")
+    # Debug plots - for now only median RMS shift heatmaps
+    create_heatmap_plot(relative_median_shift_results, label="Relative Median Shift", save_dir=debug_plots, channel_list=all_channels, station_id=station_id, matrix_key="median_shift_matrix", run_label=run_label, cmap="Reds")
+
+    logger.info(f"Analysis completed for station {station_id}, run label {run_label}. Results saved in {results_dir}. Standard plots saved in {standard_plots}. Detailed plots saved in {detailed_plots}. Plots for failed tests saved in {failed_test_plots}. Debug plots saved in {debug_plots}. Summary CSV saved in {csv_dir}. Logs saved in {logs_dir}.")
+
+    ## Write README for shifters
+
+    write_readme_for_shifters(shifters_readme_file, station_id, run_numbers, times, run_label)
+
+
+

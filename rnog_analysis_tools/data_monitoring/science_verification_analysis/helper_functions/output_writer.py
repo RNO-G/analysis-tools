@@ -1,6 +1,7 @@
 import os
 import csv
 import logging
+import textwrap
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -111,34 +112,65 @@ def write_glitching_results(glitch_info, station_id, run_label, all_channels, re
         f.write("\n".join(lines))
     logger.info(f"Glitching analysis results written to {glitch_results_file}")
 
+def block_offset_channel_health(block_offset_stats, ref_block_off_dict, use_monitoring=False):
+
+    results_dict = {}
+    for ch in sorted(block_offset_stats.keys()):
+        stats = block_offset_stats[ch]
+        results = ref_block_off_dict.get(str(ch), {})
+        if results == {}:
+            results_dict[ch] = "?"
+            continue
+
+        if use_monitoring:
+            median_ref = results.get("median_adc_offset_counts", None)
+            p99_ref = results.get("p99_adc_offset_counts", None)
+            if median_ref is not None and stats["median"] > median_ref:
+                results_dict[ch] = "X"
+            elif p99_ref is not None and stats["p99"] > p99_ref:
+                results_dict[ch] = "X"
+            else:
+                results_dict[ch] = "OK"
+        else:
+            median_ref = results.get("median_adc_offset_mv", None)
+            p99_ref = results.get("p99_adc_offset_mv", None)
+            if median_ref is not None and stats["before_median"] > median_ref:
+                results_dict[ch] = "X"
+            elif p99_ref is not None and stats["p99_before"] > p99_ref:
+                results_dict[ch] = "X"
+            elif median_ref is not None and stats["after_median"] > median_ref:
+                results_dict[ch] = "X"
+            elif p99_ref is not None and stats["p99_after"] > p99_ref:
+                results_dict[ch] = "X"
+            else:
+                results_dict[ch] = "OK"
+
+    return results_dict
+
 def write_block_offset_results(block_offset_stats, station_id, run_label, ref_block_off_dict, results_dir, use_monitoring=False):
     block_offset_results_file = os.path.join(results_dir, f"block_offset_analysis_results_{station_id}_{run_label}.txt")
-    results_dict = {}
+    # Single source of truth for the OK/X verdict - avoid re-deriving it here so it can't drift out of sync.
+    results_dict = block_offset_channel_health(block_offset_stats, ref_block_off_dict, use_monitoring=use_monitoring)
     with open(block_offset_results_file, "w") as f:
         for ch in sorted(block_offset_stats.keys()):
             stats = block_offset_stats[ch]
             results = ref_block_off_dict.get(str(ch), {})
-            print(f"stats for channel {ch}: {stats}")
             if results == {}:
                 f.write(f"Channel {ch:02d}:\n")
                 f.write("  No reference block offset data available for this channel.\n")
-                results_dict[ch] = "?"
                 continue
-            
+
             if use_monitoring:
                 median_ref = results.get("median_adc_offset_counts", None)
                 p99_ref = results.get("p99_adc_offset_counts", None)
                 f.write(f"Channel {ch:02d}:\n")
                 f.write(f"  Mean block offset: {stats['mean']}, median: {stats['median']}, std: {stats['std']}, IQR: {stats['iqr']}, P99: {stats['p99']}\n")
-                if median_ref is not None and stats["median"] > median_ref:
-                    results_dict[ch] = "X"
-                    logger.warning(f"Channel {ch:02d} has a high median block offset of {stats['median']}, which may indicate a potential issue with the channel.")
-                elif p99_ref is not None and stats["p99"] > p99_ref:
-                    results_dict[ch] = "X"
-                    logger.warning(f"Channel {ch:02d} has a high P99 of block offsets ({stats['p99']}), indicating significant variability that may need further investigation.")
-                else:
-                    results_dict[ch] = "OK"
-            
+                if results_dict[ch] == "X":
+                    if median_ref is not None and stats["median"] > median_ref:
+                        logger.warning(f"Channel {ch:02d} has a high median block offset of {stats['median']}, which may indicate a potential issue with the channel.")
+                    elif p99_ref is not None and stats["p99"] > p99_ref:
+                        logger.warning(f"Channel {ch:02d} has a high P99 of block offsets ({stats['p99']}), indicating significant variability that may need further investigation.")
+
             else:
                 median_ref = results.get("median_adc_offset_mv", None)
                 p99_ref = results.get("p99_adc_offset_mv", None)
@@ -148,21 +180,16 @@ def write_block_offset_results(block_offset_stats, station_id, run_label, ref_bl
                 f.write(f"  Removal fraction (based on median): {stats['removal_fraction']*100:.1f}%\n")
                 f.write(f"  P99 reduction fraction: {stats['p99_reduction_fraction']*100:.1f}%\n")
 
-                if median_ref is not None and stats["before_median"] > median_ref:
-                    results_dict[ch] = "X"
-                    logger.warning(f"Channel {ch:02d} has a high median block offset of {stats['before_median']} V before removal, which may indicate a potential issue with the channel.")
-                elif p99_ref is not None and stats["p99_before"] > p99_ref:
-                    results_dict[ch] = "X"
-                    logger.warning(f"Channel {ch:02d} has a high P99 of block offsets ({stats['p99_before']} V) before removal, indicating significant variability that may need further investigation.")
-                elif median_ref is not None and stats["after_median"] > median_ref:
-                    results_dict[ch] = "X"
-                    logger.warning(f"Channel {ch:02d} has a relatively high median block offset of {stats['after_median']} V after removal, removal was not fully effective.")
-                elif p99_ref is not None and stats["p99_after"] > p99_ref:
-                    results_dict[ch] = "X"
-                    logger.warning(f"Channel {ch:02d} has a relatively high P99 of block offsets ({stats['p99_after']} V) after removal, indicating that there may still be significant variability in block offsets.")
-                else:
-                    results_dict[ch] = "OK"
-    
+                if results_dict[ch] == "X":
+                    if median_ref is not None and stats["before_median"] > median_ref:
+                        logger.warning(f"Channel {ch:02d} has a high median block offset of {stats['before_median']} V before removal, which may indicate a potential issue with the channel.")
+                    elif p99_ref is not None and stats["p99_before"] > p99_ref:
+                        logger.warning(f"Channel {ch:02d} has a high P99 of block offsets ({stats['p99_before']} V) before removal, indicating significant variability that may need further investigation.")
+                    elif median_ref is not None and stats["after_median"] > median_ref:
+                        logger.warning(f"Channel {ch:02d} has a relatively high median block offset of {stats['after_median']} V after removal, removal was not fully effective.")
+                    elif p99_ref is not None and stats["p99_after"] > p99_ref:
+                        logger.warning(f"Channel {ch:02d} has a relatively high P99 of block offsets ({stats['p99_after']} V) after removal, indicating that there may still be significant variability in block offsets.")
+
     logger.info(f"Block offset analysis results written to {block_offset_results_file}")
     return results_dict
 
@@ -516,6 +543,99 @@ def create_result_csv_file_didaq(station_id, run_label, n_events_force, surface_
     logger.info(f"Validation summary saved to {out_csv_file}")
 
     return df 
+
+def write_readme_for_shifters(readme_file, station_id, run_numbers, times, run_label):
+
+    text = f"""\
+    ================================================================================
+    README FOR SHIFTERS - Station {station_id}, Runs: {run_numbers}
+    Time Range: {times[0]} to {times[-1]}
+    ================================================================================
+
+    IMPORTANT: This README is intended for shifters to understand the results of
+    the channel health analysis. Please read it carefully before interpreting the
+    results.
+
+    This directory contains the results of the channel health analysis for
+    station {station_id} over the specified runs. The analysis includes spectral
+    analysis, SNR analysis, Vrms analysis, glitching and block offset analysis
+    (for RADIANT digitizer type), and generates various plots and summary files,
+    which will be explained below.
+
+    WHAT TO DO AS A SHIFTER
+    --------------------------------------------------------------------------------
+    1. Check the Summary CSV File
+
+       The summary CSV file (channel_health_summary.csv) contains the overall
+       health status of each channel based on the various tests performed. The
+       columns indicate the results of each test:
+           X   - Test failed with serious deviation from the expected behavior.
+           !!  - Test failed with minor deviation from the expected behavior.
+           OK  - Channel passed the test.
+       The overall channel health is determined based on the results of the
+       FORCE trigger tests, and is given in the column "Channel Health (FORCE)".
+       This combines the results of the SNR, Galaxy, Vrms stability, and Vrms
+       modality tests for the FORCE trigger (glitching as well for stations with
+       RADIANT digitizer type - 11, 12, 13, 14, 21, 22, 23, 24).
+       If a channel fails any of these tests, it is marked as "X" in the overall
+       health column. If it passes all tests, it is marked as "OK". If it has
+       minor issues, it may be marked as "!!".
+       YOU CAN CHECK THE "Channel Health (FORCE)" COLUMN FIRST TO QUICKLY IDENTIFY
+       CHANNELS THAT NEED ATTENTION AND INVESTIGATE INDIVIDUAL TEST COLUMNS IF
+       NEEDED.
+
+    2. Look at the Standard Plots
+
+       The standard plots (plots/standard_plots/) are always produced, regardless
+       of whether any channel failed a test. They give a quick visual overview of
+       the station's behavior for the time period: normalized/unnormalized
+       surface and deep spectra, SNR vs. time, Vrms vs. time, and trigger rates
+       over time. It's a good idea to skim these even if the summary CSV shows
+       all channels as "OK".
+
+    3. Investigate Flagged Channels
+
+       If the summary CSV flags a channel as "X" or "!!", check
+       plots/failed_test_plots/ and test_results/failed_test_results/ first:
+       these directories only get populated for tests that failed for at least
+       one channel (e.g. SNR/z-score distributions, galaxy ratio distributions,
+       Vrms distributions with the modality fit, glitching, block offsets), so
+       you can go straight to the relevant plot/report for the failing test.
+       If a test passed for all channels, its plots and detailed numbers are
+       still saved (nothing is discarded), just under plots/detailed_plots/ and
+       test_results/detailed_results/ instead.
+
+    4. Always Check the Failed-Runs File
+
+       If any of the requested runs could not be read (missing/corrupt files,
+       invalid timestamps, or runs you excluded with -ex/--exclude-runs), they
+       are listed with a reason in
+       test_results/station{station_id}_failed_runs_in_runrange_{run_label}.csv.
+       This file is only created when at least one run failed, but you should
+       always check for its presence, as it means the analysis is based on fewer
+       runs than requested and might indicate issues with the data.
+
+    5. Check the Log File
+
+       The log file
+       (logs/logging_science_verification_analysis_station{station_id}_{run_label}.log)
+       records warnings about missing/invalid runs, low event counts, and
+       borderline channels that may not be fully captured by the summary CSV.
+
+    6. Report on the Monday Call
+
+       If you are a shifter, please report any channels that are flagged as "X"
+       or "!!" in the summary CSV, and any runs that failed to be read, on the
+       Monday shifter call. This helps the station experts and data quality team
+       to investigate and address any issues.
+
+    If you are unsure how to interpret a result, or a channel's health looks
+    suspicious, please reach out to Zeynep Su Selcuk (zeynep.su.selcuk@desy.de).
+    """
+
+    with open(readme_file, "w") as f:
+        f.write(textwrap.dedent(text))
+    logger.info(f"!!! README for shifters written to {readme_file}, please check the file for details !!!")
 
 
 
