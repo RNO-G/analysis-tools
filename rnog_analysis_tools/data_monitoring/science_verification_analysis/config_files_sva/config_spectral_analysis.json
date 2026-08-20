@@ -1,0 +1,24 @@
+{
+    "spectral_bands" : {
+        "galactic_excess": {"freq_min": 80, "freq_max": 120},
+        "freq_360_380MHz": {"freq_min": 360, "freq_max": 380},
+        "freq_482_485MHz": {"freq_min": 482, "freq_max": 485},
+        "freq_240_272MHz": {"freq_min": 240, "freq_max": 272}
+    },
+
+    "alpha_spec" : 0.005,
+
+    "ci_threshold_spec" : [0.6, 0.75],
+
+    "normalization_band" : {
+        "freq_min": 300, 
+        "freq_max": 350
+    },
+    
+    "log_ratio_thresholds_spec" : {
+        "no_excess" : 0.08,
+        "weak_excess" : 0.12,
+        "moderate_excess" : 0.16
+
+    }
+}
