@@ -151,11 +151,11 @@ def excess_info_from_ratio(ratio_arr, band_name, alpha, ci_thresholds, use_monit
         weak_excess = log_ratio_thresholds.get("weak_excess", 0.12)
         moderate_excess = log_ratio_thresholds.get("moderate_excess", 0.16)
 
-        if median_log_ratio < no_excess:
+        if mean_log_ratio < no_excess:
             validation = "NO EXCESS"
-        elif median_log_ratio < weak_excess:
+        elif mean_log_ratio < weak_excess:
             validation = f"WEAK EXCESS"
-        elif median_log_ratio < moderate_excess:
+        elif mean_log_ratio < moderate_excess:
             validation = f"MODERATE EXCESS"
         else:
             validation = f"STRONG EXCESS"
@@ -185,7 +185,9 @@ def excess_info_from_ratio(ratio_arr, band_name, alpha, ci_thresholds, use_monit
             elif confidence_interval.low > ci_thresholds[0]:
                 validation = f"MODERATE EXCESS"
             else: 
-                validation = f"WEAK EXCESS"       
+                validation = f"WEAK EXCESS"    
+
+        print(f"p value: {pval}, statistic: {statistic}, 99% CI: {confidence_interval}, frac_pos_to_neg: {frac_pos_to_neg}, validation: {validation}")   
 
         return {
             "median_log_ratio": median_log_ratio,
