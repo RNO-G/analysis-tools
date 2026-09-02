@@ -96,6 +96,7 @@ if __name__ == "__main__":
     argparser.add_argument("-st", "--station_id", type=int, required=True, help="Station to analyze, e.g --station_id 14")
     argparser.add_argument("--data_location", type=str, default="desy", help="Location of the data. Use 'desy' (inbox data), 'uchicago' (mirrored data) or provide a custom path to the data directory, e.g. --data_location /path/to/data")
     argparser.add_argument("-ex", "--exclude-runs", nargs="+", type=int, default=[], metavar="RUN", help="Run number(s) to exclude, e.g. --exclude-runs 1005 1010")
+    argparser.add_argument("--summary-only", action="store_true", help="Write the channel-health summary CSV and skip all plots and detailed reports")
     
     run_selection = argparser.add_mutually_exclusive_group(required=True)
     run_selection.add_argument("--runs", nargs="+", type=int, metavar="RUN_NUMBERS",
@@ -152,7 +153,7 @@ if __name__ == "__main__":
     elif args.data_location == "uchicago":
         logger.info("Using UChicago mirrored data location for the analysis.")
         base_data_path = "/data/satellite"
-        result_base_data_path = "/data/sva"
+        result_base_data_path = "/home/anozdrina/SVA/analysis-tools/rnog_analysis_tools/data_monitoring/science_verification_analysis/outputs"
 
     else:
         logger.info(f"Using custom data location {args.data_location} for the analysis.")
@@ -525,6 +526,10 @@ if __name__ == "__main__":
     rms_stability_validation_arr = results_df[f"{rms_label.capitalize()} Stability (FORCE)"]
     rms_modality_force_validation_arr = results_df[f"{rms_label.capitalize()} (FORCE)"]
 
+    if args.summary_only:
+        logger.info(f"Summary-only analysis completed. Summary CSV saved in {csv_dir}.")
+        raise SystemExit(0)
+
 
     #### Plotting ####
 
@@ -631,6 +636,5 @@ if __name__ == "__main__":
     ## Write README for shifters
 
     write_readme_for_shifters(shifters_readme_file, station_id, run_numbers, times, run_label)
-
 
 
