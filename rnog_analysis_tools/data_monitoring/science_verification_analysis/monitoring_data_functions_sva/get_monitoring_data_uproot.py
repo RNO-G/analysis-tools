@@ -29,6 +29,12 @@ def stack_if_object(branch_data):
         arr = np.stack(arr)
     return arr
 
+def fill_empty_spectrum(arr, reference_shape):
+    # Runs with 0 triggers of a given type have an empty avg_spectrum; replace with NaNs so shapes stay consistent across runs for stacking
+    if arr.size == 0:
+        return np.full(reference_shape, np.nan)
+    return arr
+
 def open_file(path):
     if not os.path.isfile(path):
         logger.warning(f"File {path} does not exist. Skipping...") # For multiple runs, we can have some missing monitoring files, so we just log a warning and skip those runs instead of raising an error.
@@ -491,17 +497,17 @@ def read_multiple_runs(base_path, station_id, run_numbers, daq_type):
         # Add runsummary 
         if daq_type == "radiant":
             event_info_dict["avg_spectrum"] = stack_if_object(run_summary_dict["avg_spectrum"]) # (n_ch, n_freqs)
-            event_info_dict["avg_spectrum_force"] = stack_if_object(run_summary_dict["avg_spectrum_force"]) # (n_ch, n_freqs)
-            event_info_dict["avg_spectrum_lt"] = stack_if_object(run_summary_dict["avg_spectrum_lt"]) # (n_ch, n_freqs)
-            event_info_dict["avg_spectrum_rf0"] = stack_if_object(run_summary_dict["avg_spectrum_rf0"]) #RADIANT0
-            event_info_dict["avg_spectrum_rf1"] = stack_if_object(run_summary_dict["avg_spectrum_rf1"]) #RADIANT1
+            event_info_dict["avg_spectrum_force"] = fill_empty_spectrum(stack_if_object(run_summary_dict["avg_spectrum_force"]), event_info_dict["avg_spectrum"].shape) # (n_ch, n_freqs)
+            event_info_dict["avg_spectrum_lt"] = fill_empty_spectrum(stack_if_object(run_summary_dict["avg_spectrum_lt"]), event_info_dict["avg_spectrum"].shape) # (n_ch, n_freqs)
+            event_info_dict["avg_spectrum_rf0"] = fill_empty_spectrum(stack_if_object(run_summary_dict["avg_spectrum_rf0"]), event_info_dict["avg_spectrum"].shape) #RADIANT0
+            event_info_dict["avg_spectrum_rf1"] = fill_empty_spectrum(stack_if_object(run_summary_dict["avg_spectrum_rf1"]), event_info_dict["avg_spectrum"].shape) #RADIANT1
 
         elif daq_type == "didaq":
             event_info_dict["avg_spectrum"] = stack_if_object(run_summary_dict["avg_spectrum"]) # (n_ch, n_freqs)
-            event_info_dict["avg_spectrum_force"] = stack_if_object(run_summary_dict["avg_spectrum_force"]) # (n_ch, n_freqs)
-            event_info_dict["avg_spectrum_lt"] = stack_if_object(run_summary_dict["avg_spectrum_didaq_deep_phased"]) #DIDAQ_DEEP_PHASED
-            event_info_dict["avg_spectrum_rf0"] = stack_if_object(run_summary_dict["avg_spectrum_didaq_surf_up"]) #DIDAQ_SURF_UP
-            event_info_dict["avg_spectrum_rf1"] = stack_if_object(run_summary_dict["avg_spectrum_didaq_surf_down"]) #DIDAQ_SURF_DOWN
+            event_info_dict["avg_spectrum_force"] = fill_empty_spectrum(stack_if_object(run_summary_dict["avg_spectrum_force"]), event_info_dict["avg_spectrum"].shape) # (n_ch, n_freqs)
+            event_info_dict["avg_spectrum_lt"] = fill_empty_spectrum(stack_if_object(run_summary_dict["avg_spectrum_didaq_deep_phased"]), event_info_dict["avg_spectrum"].shape) #DIDAQ_DEEP_PHASED
+            event_info_dict["avg_spectrum_rf0"] = fill_empty_spectrum(stack_if_object(run_summary_dict["avg_spectrum_didaq_surf_up"]), event_info_dict["avg_spectrum"].shape) #DIDAQ_SURF_UP
+            event_info_dict["avg_spectrum_rf1"] = fill_empty_spectrum(stack_if_object(run_summary_dict["avg_spectrum_didaq_surf_down"]), event_info_dict["avg_spectrum"].shape) #DIDAQ_SURF_DOWN
         
         # Calculate SNR and add to event info dict
         snr_arr = calculate_snr(event_info_dict["max_abs_amplitude_arr"], event_info_dict["rms_arr"])

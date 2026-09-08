@@ -16,9 +16,9 @@
     },
     
     "log_ratio_thresholds_spec" : {
-        "no_excess" : 0.08,
-        "weak_excess" : 0.12,
-        "moderate_excess" : 0.16
+        "no_excess" : 0.083,
+        "weak_excess" : 0.128,
+        "moderate_excess" : 0.174
 
     }
 }

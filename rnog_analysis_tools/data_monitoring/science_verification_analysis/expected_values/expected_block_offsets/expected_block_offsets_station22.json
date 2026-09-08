@@ -1,0 +1,650 @@
+{
+    "0": {
+        "median_adc_offset_counts": 1,
+        "iqr_adc_offset_counts": 0,
+        "median_adc_offset_mv": 0.6375372914712021,
+        "iqr_adc_offset_mv": 0.19989914153212895,
+        "p99_adc_offset_counts": 2,
+        "p99_adc_offset_mv": 1.0778953549788142,
+        "p95_adc_offset_counts": 2,
+        "p95_adc_offset_mv": 0.9269348830726862,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 5.154608249664307,
+            "vrms_target_mv": 3.144311032295227,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "1": {
+        "median_adc_offset_counts": 2,
+        "iqr_adc_offset_counts": 0,
+        "median_adc_offset_mv": 1.120081144574539,
+        "iqr_adc_offset_mv": 0.3512002548589561,
+        "p99_adc_offset_counts": 3,
+        "p99_adc_offset_mv": 1.8937406157844885,
+        "p95_adc_offset_counts": 3,
+        "p95_adc_offset_mv": 1.6285200860678104,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 9.056065559387207,
+            "vrms_target_mv": 5.5241999912261965,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "2": {
+        "median_adc_offset_counts": 2,
+        "iqr_adc_offset_counts": 1,
+        "median_adc_offset_mv": 1.0324118987763882,
+        "iqr_adc_offset_mv": 0.32371165582598305,
+        "p99_adc_offset_counts": 3,
+        "p99_adc_offset_mv": 1.7455167015374404,
+        "p95_adc_offset_counts": 2,
+        "p95_adc_offset_mv": 1.5010550997993948,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 8.347243309020996,
+            "vrms_target_mv": 5.0918184185028075,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "3": {
+        "median_adc_offset_counts": 1,
+        "iqr_adc_offset_counts": 1,
+        "median_adc_offset_mv": 0.7866803062194633,
+        "iqr_adc_offset_mv": 0.24666277561679917,
+        "p99_adc_offset_counts": 2,
+        "p99_adc_offset_mv": 1.3300540364791718,
+        "p95_adc_offset_counts": 2,
+        "p95_adc_offset_mv": 1.1437784540860252,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 6.360457420349121,
+            "vrms_target_mv": 3.8798790264129637,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "4": {
+        "median_adc_offset_counts": 1,
+        "iqr_adc_offset_counts": 1,
+        "median_adc_offset_mv": 0.8794129913654012,
+        "iqr_adc_offset_mv": 0.2757390106866964,
+        "p99_adc_offset_counts": 2,
+        "p99_adc_offset_mv": 1.4868387954426159,
+        "p95_adc_offset_counts": 2,
+        "p95_adc_offset_mv": 1.2786053290197388,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 7.110218524932861,
+            "vrms_target_mv": 4.3372333002090455,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "5": {
+        "median_adc_offset_counts": 2,
+        "iqr_adc_offset_counts": 1,
+        "median_adc_offset_mv": 1.4068335845802693,
+        "iqr_adc_offset_mv": 0.44111117827664637,
+        "p99_adc_offset_counts": 4,
+        "p99_adc_offset_mv": 2.3785579390155007,
+        "p95_adc_offset_counts": 3,
+        "p95_adc_offset_mv": 2.0454381910999855,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 11.374512672424316,
+            "vrms_target_mv": 6.938452730178833,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "6": {
+        "median_adc_offset_counts": 3,
+        "iqr_adc_offset_counts": 1,
+        "median_adc_offset_mv": 1.6239083102573568,
+        "iqr_adc_offset_mv": 0.5091747282707759,
+        "p99_adc_offset_counts": 5,
+        "p99_adc_offset_mv": 2.745569942267396,
+        "p95_adc_offset_counts": 4,
+        "p95_adc_offset_mv": 2.3610497453656163,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 13.129602432250977,
+            "vrms_target_mv": 8.009057483673095,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "7": {
+        "median_adc_offset_counts": 3,
+        "iqr_adc_offset_counts": 1,
+        "median_adc_offset_mv": 1.5712278992166948,
+        "iqr_adc_offset_mv": 0.492656841264846,
+        "p99_adc_offset_counts": 4,
+        "p99_adc_offset_mv": 2.656502257727613,
+        "p95_adc_offset_counts": 4,
+        "p95_adc_offset_mv": 2.284456091470466,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 12.7036714553833,
+            "vrms_target_mv": 7.749239587783813,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "8": {
+        "median_adc_offset_counts": 2,
+        "iqr_adc_offset_counts": 1,
+        "median_adc_offset_mv": 1.028749095629994,
+        "iqr_adc_offset_mv": 0.3225631877844105,
+        "p99_adc_offset_counts": 3,
+        "p99_adc_offset_mv": 1.739323936736829,
+        "p95_adc_offset_counts": 2,
+        "p95_adc_offset_mv": 1.4957296387610513,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 8.317628860473633,
+            "vrms_target_mv": 5.073753604888916,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "9": {
+        "median_adc_offset_counts": 2,
+        "iqr_adc_offset_counts": 1,
+        "median_adc_offset_mv": 1.0660021615148518,
+        "iqr_adc_offset_mv": 0.33424384707986643,
+        "p99_adc_offset_counts": 3,
+        "p99_adc_offset_mv": 1.8023083412778484,
+        "p95_adc_offset_counts": 3,
+        "p95_adc_offset_mv": 1.5498930057233107,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 8.618826866149902,
+            "vrms_target_mv": 5.257484388351441,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "10": {
+        "median_adc_offset_counts": 1,
+        "iqr_adc_offset_counts": 0,
+        "median_adc_offset_mv": 0.6103415708244488,
+        "iqr_adc_offset_mv": 0.19137195216868286,
+        "p99_adc_offset_counts": 2,
+        "p99_adc_offset_mv": 1.031915078448181,
+        "p95_adc_offset_counts": 1,
+        "p95_adc_offset_mv": 0.8873941966296965,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 4.934725761413574,
+            "vrms_target_mv": 3.0101827144622804,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "11": {
+        "median_adc_offset_counts": 1,
+        "iqr_adc_offset_counts": 0,
+        "median_adc_offset_mv": 0.6014823949857926,
+        "iqr_adc_offset_mv": 0.18859416698102283,
+        "p99_adc_offset_counts": 2,
+        "p99_adc_offset_mv": 1.0169367162203151,
+        "p95_adc_offset_counts": 1,
+        "p95_adc_offset_mv": 0.8745135710882868,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 4.863097667694092,
+            "vrms_target_mv": 2.966489577293396,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "12": {
+        "median_adc_offset_counts": 3,
+        "iqr_adc_offset_counts": 1,
+        "median_adc_offset_mv": 1.7582586274629004,
+        "iqr_adc_offset_mv": 0.5513001277309115,
+        "p99_adc_offset_counts": 5,
+        "p99_adc_offset_mv": 2.9727183534946113,
+        "p95_adc_offset_counts": 4,
+        "p95_adc_offset_mv": 2.5563857629377345,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 14.215849876403809,
+            "vrms_target_mv": 8.671668424606324,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "13": {
+        "median_adc_offset_counts": 3,
+        "iqr_adc_offset_counts": 1,
+        "median_adc_offset_mv": 1.5285033346182901,
+        "iqr_adc_offset_mv": 0.47926059935114296,
+        "p99_adc_offset_counts": 4,
+        "p99_adc_offset_mv": 2.584267095423867,
+        "p95_adc_offset_counts": 4,
+        "p95_adc_offset_mv": 2.222337545904347,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 12.358235359191895,
+            "vrms_target_mv": 7.538523569107055,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "14": {
+        "median_adc_offset_counts": 3,
+        "iqr_adc_offset_counts": 1,
+        "median_adc_offset_mv": 1.7345654704341744,
+        "iqr_adc_offset_mv": 0.5438711634748779,
+        "p99_adc_offset_counts": 5,
+        "p99_adc_offset_mv": 2.932659922015076,
+        "p95_adc_offset_counts": 4,
+        "p95_adc_offset_mv": 2.521937560403001,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 14.024286270141602,
+            "vrms_target_mv": 8.554814624786376,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "15": {
+        "median_adc_offset_counts": 3,
+        "iqr_adc_offset_counts": 1,
+        "median_adc_offset_mv": 1.8472687661270615,
+        "iqr_adc_offset_mv": 0.5792091622997941,
+        "p99_adc_offset_counts": 5,
+        "p99_adc_offset_mv": 3.123209338564232,
+        "p95_adc_offset_counts": 4,
+        "p95_adc_offset_mv": 2.6858003141784192,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 14.935513496398926,
+            "vrms_target_mv": 9.110663232803345,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "16": {
+        "median_adc_offset_counts": 3,
+        "iqr_adc_offset_counts": 1,
+        "median_adc_offset_mv": 1.6894957587595898,
+        "iqr_adc_offset_mv": 0.5297396031828363,
+        "p99_adc_offset_counts": 5,
+        "p99_adc_offset_mv": 2.856459778879663,
+        "p95_adc_offset_counts": 4,
+        "p95_adc_offset_mv": 2.456409334085768,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 13.659889221191406,
+            "vrms_target_mv": 8.332532424926757,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "17": {
+        "median_adc_offset_counts": 3,
+        "iqr_adc_offset_counts": 1,
+        "median_adc_offset_mv": 1.7229940179410963,
+        "iqr_adc_offset_mv": 0.54024294681902,
+        "p99_adc_offset_counts": 5,
+        "p99_adc_offset_mv": 2.9130958666107807,
+        "p95_adc_offset_counts": 4,
+        "p95_adc_offset_mv": 2.505113473236428,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 13.930728912353516,
+            "vrms_target_mv": 8.497744636535645,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "18": {
+        "median_adc_offset_counts": 3,
+        "iqr_adc_offset_counts": 0,
+        "median_adc_offset_mv": 1.8140535948131147,
+        "iqr_adc_offset_mv": 0.5687945805642245,
+        "p99_adc_offset_counts": 5,
+        "p99_adc_offset_mv": 3.067051872400159,
+        "p95_adc_offset_counts": 4,
+        "p95_adc_offset_mv": 2.637507765099315,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 14.666962623596191,
+            "vrms_target_mv": 8.946847200393677,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "19": {
+        "median_adc_offset_counts": 3,
+        "iqr_adc_offset_counts": 1,
+        "median_adc_offset_mv": 1.658784499634213,
+        "iqr_adc_offset_mv": 0.5201101204581997,
+        "p99_adc_offset_counts": 5,
+        "p99_adc_offset_mv": 2.804535720476108,
+        "p95_adc_offset_counts": 4,
+        "p95_adc_offset_mv": 2.411757299189575,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 13.411582946777344,
+            "vrms_target_mv": 8.181065597534179,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "20": {
+        "median_adc_offset_counts": 3,
+        "iqr_adc_offset_counts": 1,
+        "median_adc_offset_mv": 1.8380774928337735,
+        "iqr_adc_offset_mv": 0.5763272483074764,
+        "p99_adc_offset_counts": 5,
+        "p99_adc_offset_mv": 3.107669493410526,
+        "p95_adc_offset_counts": 4,
+        "p95_adc_offset_mv": 2.6724368420343154,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 14.861200332641602,
+            "vrms_target_mv": 9.065332202911376,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "21": {
+        "median_adc_offset_counts": 2,
+        "iqr_adc_offset_counts": 1,
+        "median_adc_offset_mv": 1.4437396319208098,
+        "iqr_adc_offset_mv": 0.4526830302755991,
+        "p99_adc_offset_counts": 4,
+        "p99_adc_offset_mv": 2.4409556332855833,
+        "p95_adc_offset_counts": 3,
+        "p95_adc_offset_mv": 2.099097017232863,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 11.672904968261719,
+            "vrms_target_mv": 7.1204720306396485,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "22": {
+        "median_adc_offset_counts": 2,
+        "iqr_adc_offset_counts": 0,
+        "median_adc_offset_mv": 1.2212366963832562,
+        "iqr_adc_offset_mv": 0.3829174708371914,
+        "p99_adc_offset_counts": 3,
+        "p99_adc_offset_mv": 2.064766061485589,
+        "p95_adc_offset_counts": 3,
+        "p95_adc_offset_mv": 1.7755932233451484,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 9.873927116394043,
+            "vrms_target_mv": 6.023095541000366,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    },
+    "23": {
+        "median_adc_offset_counts": 2,
+        "iqr_adc_offset_counts": 0,
+        "median_adc_offset_mv": 1.243339017549572,
+        "iqr_adc_offset_mv": 0.38984763019589885,
+        "p99_adc_offset_counts": 3,
+        "p99_adc_offset_mv": 2.102134839183981,
+        "p95_adc_offset_counts": 3,
+        "p95_adc_offset_mv": 1.8077284611736,
+        "settings": {
+            "n_traces": 92560,
+            "n_samples": 2048,
+            "block_size": 128,
+            "fs_ghz": 2.4,
+            "vrms_target_adc": 10.052628517150879,
+            "vrms_target_mv": 6.132103395462036,
+            "band_mhz": [
+                0.1,
+                0.8
+            ],
+            "n_bits": 12,
+            "lsb_mv": 0.61,
+            "inject_percentage": 10,
+            "apply_adc": true,
+            "seed": 42
+        }
+    }
+}

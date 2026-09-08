@@ -141,6 +141,11 @@ if __name__ == "__main__":
     date_label = datetime.datetime.now().strftime("%y-%m-%d")
     random_string = ''.join(random.choices(string.digits, k=6))
 
+    if 'start_time' in locals() and 'stop_time' in locals() and start_time and stop_time:
+        top_directory_date_label = f"{start_time}_{stop_time}"
+    else:
+        top_directory_date_label = f"2026-08-18_2026-08-24"  # Default value if no time range is provided
+
     save_directory_label = (f"{date_label}_station-{station_id}_run{first_run}-run{last_run}_{random_string}")
 
     # Choose the data location based on the argument provided and define the save location for the results
@@ -161,8 +166,10 @@ if __name__ == "__main__":
         result_base_data_path = "/pnfs/ifh.de/acs/radio/diskonly/NuRadioMC/science_verification_analysis"
         
         
-
-    result_save_location = os.path.join(result_base_data_path, save_directory_label)
+    if top_directory_date_label is None:
+        result_save_location = os.path.join(result_base_data_path, save_directory_label)
+    else:
+        result_save_location = os.path.join(result_base_data_path, top_directory_date_label, save_directory_label)
     os.makedirs(result_save_location, exist_ok=True)
 
     logger.info(f"Results will be saved in {result_save_location}.")
